@@ -1,5 +1,6 @@
 public enum Status {
     SUCCESS,
+    EXTRACTION_ERROR,
     COMPILE_ERROR,
     RUNTIME_ERROR,
     WRONG_OUTPUT

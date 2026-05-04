@@ -38,7 +38,7 @@ public class ZipService {
             } catch (ZipServiceException e) {
                 // As per your logic: record failure but continue processing
                 submission.setResult(new Result(
-                        Status.COMPILE_ERROR,
+                        Status.EXTRACTION_ERROR,
                         "",
                         "ZIP extraction failed: " + e.getMessage()
                 ));
@@ -66,17 +66,44 @@ public class ZipService {
 
         Path destPath = destinationDir.toPath().toAbsolutePath().normalize();
 
-        try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(zipFile)))) {
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                try {
-                    extractEntry(zis, entry, destPath);
-                } finally {
-                    zis.closeEntry();
+        try (ZipFile zip = new ZipFile(zipFile)) {
+
+            Enumeration<? extends ZipEntry> entries = zip.entries();
+
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+
+                String cleanedName = removeOuterStudentFolder(
+                        entry.getName(),
+                        submission.getStudentId()
+                );
+
+                if (cleanedName.isEmpty()) {
+                    continue;
+                }
+
+                Path targetPath = destPath.resolve(cleanedName).normalize();
+
+                if (!targetPath.startsWith(destPath)) {
+                    continue;
+                }
+
+                if (entry.isDirectory()) {
+                    Files.createDirectories(targetPath);
+                } else {
+                    Files.createDirectories(targetPath.getParent());
+
+                    try (InputStream is = zip.getInputStream(entry)) {
+                        Files.copy(is, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                    }
                 }
             }
+
         } catch (IOException e) {
-            throw new ZipServiceException("Failed to extract " + zipFile.getName() + ": " + e.getMessage(), e);
+            throw new ZipServiceException(
+                    "Failed to extract " + zipFile.getName() + ": " + e.getMessage(),
+                    e
+            );
         }
     }
 
@@ -94,31 +121,6 @@ public class ZipService {
         }
     }
 
-    // ------------------------------------------------------------------ //
-    //  Private Helpers (Internal Logic)                                  //
-    // ------------------------------------------------------------------ //
-
-    private void extractEntry(ZipInputStream zis, ZipEntry entry, Path destRoot) throws IOException {
-        Path targetPath = destRoot.resolve(entry.getName()).normalize();
-
-        // Path Traversal Security Guard
-        if (!targetPath.startsWith(destRoot)) {
-            return;
-        }
-
-        if (entry.isDirectory()) {
-            Files.createDirectories(targetPath);
-        } else {
-            Files.createDirectories(targetPath.getParent());
-            try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(targetPath.toFile()))) {
-                byte[] buffer = new byte[8192];
-                int bytesRead;
-                while ((bytesRead = zis.read(buffer)) != -1) {
-                    bos.write(buffer, 0, bytesRead);
-                }
-            }
-        }
-    }
 
     private String stripZipExtension(String filename) {
         if (filename.toLowerCase().endsWith(".zip")) {
@@ -142,5 +144,14 @@ public class ZipService {
             }
         }
         Files.delete(path);
+    }
+    private String removeOuterStudentFolder(String entryName, String studentId) {
+        String prefix = studentId + "/";
+
+        if (entryName.startsWith(prefix)) {
+            return entryName.substring(prefix.length());
+        }
+
+        return entryName;
     }
 }

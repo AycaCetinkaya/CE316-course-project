@@ -1,5 +1,20 @@
+# IntelliJ
 .idea/
 *.iml
+
+# Build output
 out/
 *.class
+
+# Mac
 .DS_Store
+
+# Executables (C compile output)
+main
+main.exe
+
+# Extracted submission folders
+test-submissions/*/
+
+# Keep Zip files
+!test-submissions/*.zip

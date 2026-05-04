@@ -1,55 +1,54 @@
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
-import java.io.File;
 
 public class Main {
 
     public static void main(String[] args) {
 
-        Configuration config = new Configuration(
-                "C Config",
-                "gcc *.c -o main",
-                "./main"
-        );
+        try {
+            File submissionsDir = new File("test-submissions");
 
-        TestCase test = new TestCase("3 1 2", "1 2 3");
-        List<TestCase> tests = new ArrayList<>();
-        tests.add(test);
+            ZipService zipService = new ZipService();
+            List<StudentZipSubmission> submissions = zipService.extractAll(submissionsDir);
 
-        StudentZipSubmission submission = new StudentZipSubmission("123456", null);
-        List<StudentZipSubmission> submissions = new ArrayList<>();
-        submissions.add(submission);
+            Configuration config = new Configuration(
+                    "C Config",
+                    "gcc *.c -o main",
+                    "./main"
+            );
+            List<TestCase> testCases = new ArrayList<>();
 
-        Project project = new Project(
-                "Sorting Project",
-                config,
-                submissions,
-                tests
-        );
+            testCases.add(new TestCase("3 1 2", "1 2 3"));
+            testCases.add(new TestCase("9 4 7", "4 7 9"));
+            testCases.add(new TestCase("10 2 5", "2 5 10"));
+            Project project = new Project(
+                    "Sorting Project",
+                    config,
+                    submissions,
+                    testCases
+            );
 
-        Result result = new Result(Status.SUCCESS, "1 2 3", "");
-        submission.setResult(result);
+            EvaluationService evaluationService = new EvaluationService();
+            evaluationService.evaluateProject(project);
 
-        System.out.println("Project: " + project.getName());
-        System.out.println("Config: " + project.getConfiguration().getName());
+            System.out.println("\n--- FINAL RESULTS ---");
 
-        System.out.println("Student ID: " + submission.getStudentId());
-        System.out.println("Result: " + submission.getResult().getStatus());
-        System.out.println("Output: " + submission.getResult().getOutput());
+            for (StudentZipSubmission submission : project.getSubmissions()) {
+                Result result = submission.getResult();
 
-        System.out.println("Test Expected: " + tests.get(0).getExpectedOutput());
-        CommandExecutor executor = new CommandExecutor();
+                System.out.println("Student: " + submission.getStudentId());
+                System.out.println("Status : " + result.getStatus());
 
-        CommandResult commandResult = executor.execute("echo Hello", new java.io.File("."));
+                if (result.getErrorMessage() != null && !result.getErrorMessage().isBlank()) {
+                    System.out.println("Error  : " + result.getErrorMessage().split("\n")[0]);
+                }
 
-        System.out.println("Command Output:");
-        System.out.println(commandResult.getOutput());
+                System.out.println();
+            }
 
-        System.out.println("Command Error:");
-        System.out.println(commandResult.getError());
-
-        System.out.println("Exit Code: " + commandResult.getExitCode());
-
+        } catch (ZipServiceException e) {
+            System.out.println("ZIP service error: " + e.getMessage());
+        }
     }
 }
