@@ -589,6 +589,7 @@ public class IAEGui extends JFrame {
         cmbConfiguration.addItem("C Language");
         cmbConfiguration.addItem("Java");
         cmbConfiguration.addItem("Python 3");
+        cmbConfiguration.addItem("Haskell");
         cmbConfiguration.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
         cmbConfiguration.setPreferredSize(new Dimension(0, 38));
         cmbConfiguration.setFont(FONT_BODY);
@@ -717,6 +718,8 @@ public class IAEGui extends JFrame {
                 return Language.JAVA;
             case "Python 3":
                 return Language.PYTHON;
+            case "Haskell":
+                return Language.HASKELL;
             default:
                 return Language.AUTO;
         }

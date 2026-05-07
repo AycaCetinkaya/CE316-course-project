@@ -59,6 +59,7 @@ public class ProjectRunnerService {
             if (name.endsWith(".c")) return Language.C;
             if (name.endsWith(".java")) return Language.JAVA;
             if (name.endsWith(".py")) return Language.PYTHON;
+            if (name.endsWith(".hs") || name.endsWith(".lhs")) return Language.HASKELL;
         }
 
         return Language.UNKNOWN;
@@ -86,10 +87,23 @@ public class ProjectRunnerService {
                 );
 
             case PYTHON:
+                String mainPython = findMainPythonFile(folder);
+                if (mainPython == null) return null;
+
                 return new Configuration(
                         "Python Config",
                         "echo skip",
-                        isWindows ? "python main.py" : "python3 main.py"
+                        (isWindows ? "python " : "python3 ") + mainPython
+                );
+
+            case HASKELL:
+                String mainHaskell = findMainHaskellFile(folder);
+                if (mainHaskell == null) return null;
+
+                return new Configuration(
+                        "Haskell Config",
+                        "ghc --make " + mainHaskell + " -o main",
+                        isWindows ? "main.exe" : "./main"
                 );
 
             default:
@@ -125,6 +139,76 @@ public class ProjectRunnerService {
                     }
                 } catch (Exception ignored) {
                 }
+            }
+        }
+
+        return null;
+    }
+
+    private String findMainPythonFile(File folder) {
+        File fallback = null;
+
+        for (File file : getAllFiles(folder)) {
+            String name = file.getName();
+            if (!name.endsWith(".py")) continue;
+
+            try {
+                String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
+
+                if (content.contains("if __name__ == \"__main__\"") ||
+                        content.contains("if __name__ == '__main__'")) {
+                    return name;
+                }
+
+                if (name.equals("main.py")) {
+                    fallback = file;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (fallback != null) {
+            return fallback.getName();
+        }
+
+        for (File file : getAllFiles(folder)) {
+            if (file.getName().endsWith(".py")) {
+                return file.getName();
+            }
+        }
+
+        return null;
+    }
+
+    private String findMainHaskellFile(File folder) {
+        File fallback = null;
+
+        for (File file : getAllFiles(folder)) {
+            String name = file.getName();
+            if (!name.endsWith(".hs") && !name.endsWith(".lhs")) continue;
+
+            try {
+                String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
+
+                if (content.matches("(?s).*\\bmain\\s*[:=].*")) {
+                    return name;
+                }
+
+                if (name.equalsIgnoreCase("Main.hs") || name.equalsIgnoreCase("main.hs")) {
+                    fallback = file;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (fallback != null) {
+            return fallback.getName();
+        }
+
+        for (File file : getAllFiles(folder)) {
+            String name = file.getName();
+            if (name.endsWith(".hs") || name.endsWith(".lhs")) {
+                return name;
             }
         }
 

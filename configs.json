@@ -1,0 +1,6 @@
+[
+  {"name":"C Config","language":"C","compileCommand":"gcc *.c -o main","runCommand":"./main","sourceExtension":".c","entryPointPattern":"int\\s+main\\s*\\("},
+  {"name":"Java Config","language":"JAVA","compileCommand":"javac *.java","runCommand":"java $MAIN","sourceExtension":".java","entryPointPattern":"public\\s+static\\s+void\\s+main"},
+  {"name":"Python Config","language":"PYTHON","compileCommand":"echo skip","runCommand":"python3 $MAIN","sourceExtension":".py","entryPointPattern":"if\\s+__name__\\s*==\\s*[\"']__main__[\"']"},
+  {"name":"Haskell Config","language":"HASKELL","compileCommand":"ghc --make $MAIN -o main","runCommand":"./main","sourceExtension":".hs","entryPointPattern":"\\bmain\\s*[:=]"}
+]
