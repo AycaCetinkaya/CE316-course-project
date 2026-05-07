@@ -56,6 +56,17 @@ public class IAEGui extends JFrame {
         mainContentPanel = new JPanel(cardLayout);
         mainContentPanel.setBackground(BG_CANVAS);
 
+        DatabaseManager db = new DatabaseManager();
+        try {
+            db.connect();
+            db.initSchema();
+            List<Project> saved = db.getProjects();
+            recentProjects.addAll(saved);
+            db.disconnect();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         addPages();
 
         rightArea.add(mainContentPanel, BorderLayout.CENTER);

@@ -9,37 +9,77 @@ public class ProjectRunnerService {
                               List<TestCase> testCases,
                               Language selectedLanguage) throws ZipServiceException {
 
+        // --- Database Setup (Version A) ---
+        DatabaseManager db = new DatabaseManager();
+        try {
+            db.connect();
+            db.initSchema();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         ZipService zipService = new ZipService();
         List<StudentZipSubmission> submissions = zipService.extractAll(submissionsDir);
 
         EvaluationService evaluationService = new EvaluationService();
+        long projectId = -1;
 
-        for (StudentZipSubmission submission : submissions) {
-            if (submission.getResult() != null &&
-                    submission.getResult().getStatus() == Status.EXTRACTION_ERROR) {
-                continue;
+        try {
+            for (StudentZipSubmission submission : submissions) {
+                if (submission.getResult() != null &&
+                        submission.getResult().getStatus() == Status.EXTRACTION_ERROR) {
+                    continue;
+                }
+
+                Language actualLanguage = selectedLanguage == Language.AUTO
+                        ? detectLanguage(submission.getExtractedFolder())
+                        : selectedLanguage;
+
+                Configuration config = getConfig(actualLanguage, submission.getExtractedFolder());
+
+                if (config == null) {
+                    submission.setResult(new Result(
+                            Status.RUNTIME_ERROR,
+                            "",
+                            "Unsupported language or no source file found."
+                    ));
+                    continue;
+                }
+
+                // --- Persistence Logic (Version A) ---
+                if (projectId == -1) {
+                    try {
+                        long configId = db.insertConfiguration(config);
+                        projectId = db.insertProject(projectName, configId);
+
+                        for (TestCase tc : testCases) {
+                            db.insertTestCase(projectId, tc);
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                // --- Evaluation ---
+                List<StudentZipSubmission> single = new ArrayList<>();
+                single.add(submission);
+
+                Project singleProject = new Project(projectName, config, single, testCases);
+                evaluationService.evaluateProject(singleProject);
+
+                // --- Save Submission Results (Version A) ---
+                try {
+                    long submissionId = db.insertSubmission(projectId, submission);
+                    if (submission.getResult() != null) {
+                        db.updateSubmissionStatus(submissionId, submission.getResult().getStatus());
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
-
-            Language actualLanguage = selectedLanguage == Language.AUTO
-                    ? detectLanguage(submission.getExtractedFolder())
-                    : selectedLanguage;
-
-            Configuration config = getConfig(actualLanguage, submission.getExtractedFolder());
-
-            if (config == null) {
-                submission.setResult(new Result(
-                        Status.RUNTIME_ERROR,
-                        "",
-                        "Unsupported language or no source file found."
-                ));
-                continue;
-            }
-
-            List<StudentZipSubmission> single = new ArrayList<>();
-            single.add(submission);
-
-            Project singleProject = new Project(projectName, config, single, testCases);
-            evaluationService.evaluateProject(singleProject);
+        } finally {
+            // Ensure disconnect happens regardless of loop success
+            db.disconnect();
         }
 
         return new Project(
@@ -87,6 +127,7 @@ public class ProjectRunnerService {
                 );
 
             case PYTHON:
+                // --- Improved Detection (Version B) ---
                 String mainPython = findMainPythonFile(folder);
                 if (mainPython == null) return null;
 
@@ -97,6 +138,7 @@ public class ProjectRunnerService {
                 );
 
             case HASKELL:
+                // --- Improved Detection (Version B) ---
                 String mainHaskell = findMainHaskellFile(folder);
                 if (mainHaskell == null) return null;
 
@@ -133,85 +175,56 @@ public class ProjectRunnerService {
             if (file.getName().endsWith(".java")) {
                 try {
                     String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
-
                     if (content.contains("public static void main")) {
                         return file.getName().replace(".java", "");
                     }
-                } catch (Exception ignored) {
-                }
+                } catch (Exception ignored) { }
             }
         }
-
         return null;
     }
 
     private String findMainPythonFile(File folder) {
         File fallback = null;
-
         for (File file : getAllFiles(folder)) {
             String name = file.getName();
             if (!name.endsWith(".py")) continue;
-
             try {
                 String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
-
                 if (content.contains("if __name__ == \"__main__\"") ||
                         content.contains("if __name__ == '__main__'")) {
                     return name;
                 }
-
-                if (name.equals("main.py")) {
-                    fallback = file;
-                }
-            } catch (Exception ignored) {
-            }
+                if (name.equals("main.py")) fallback = file;
+            } catch (Exception ignored) { }
         }
-
-        if (fallback != null) {
-            return fallback.getName();
-        }
-
+        if (fallback != null) return fallback.getName();
         for (File file : getAllFiles(folder)) {
-            if (file.getName().endsWith(".py")) {
-                return file.getName();
-            }
+            if (file.getName().endsWith(".py")) return file.getName();
         }
-
         return null;
     }
 
     private String findMainHaskellFile(File folder) {
         File fallback = null;
-
         for (File file : getAllFiles(folder)) {
             String name = file.getName();
             if (!name.endsWith(".hs") && !name.endsWith(".lhs")) continue;
-
             try {
                 String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
-
                 if (content.matches("(?s).*\\bmain\\s*[:=].*")) {
                     return name;
                 }
-
                 if (name.equalsIgnoreCase("Main.hs") || name.equalsIgnoreCase("main.hs")) {
                     fallback = file;
                 }
-            } catch (Exception ignored) {
-            }
+            } catch (Exception ignored) { }
         }
-
-        if (fallback != null) {
-            return fallback.getName();
-        }
-
+        if (fallback != null) return fallback.getName();
         for (File file : getAllFiles(folder)) {
             String name = file.getName();
-            if (name.endsWith(".hs") || name.endsWith(".lhs")) {
-                return name;
-            }
+            if (name.endsWith(".hs") || name.endsWith(".lhs")) return name;
         }
-
         return null;
     }
 }
