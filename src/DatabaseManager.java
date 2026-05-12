@@ -35,7 +35,7 @@ public class DatabaseManager {
                 """
             CREATE TABLE IF NOT EXISTS Configurations (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                name            TEXT    NOT NULL,
+                name            TEXT    NOT NULL UNIQUE,
                 compile_command TEXT    NOT NULL,
                 run_command     TEXT    NOT NULL
             )
@@ -43,7 +43,7 @@ public class DatabaseManager {
                 """
             CREATE TABLE IF NOT EXISTS Projects (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                name      TEXT    NOT NULL,
+                name      TEXT    NOT NULL UNIQUE,
                 config_id INTEGER NOT NULL,
                 FOREIGN KEY (config_id) REFERENCES Configurations(id)
             )
@@ -105,6 +105,24 @@ public class DatabaseManager {
         }
     }
 
+    public long upsertConfiguration(Configuration config) throws SQLException {
+        String insertSql = "INSERT OR IGNORE INTO Configurations (name, compile_command, run_command) VALUES (?, ?, ?)";
+        try (PreparedStatement ps = connection.prepareStatement(insertSql)) {
+            ps.setString(1, config.getName());
+            ps.setString(2, config.getCompileCommand());
+            ps.setString(3, config.getRunCommand());
+            ps.executeUpdate();
+        }
+
+        String selectSql = "SELECT id FROM Configurations WHERE name = ?";
+        try (PreparedStatement ps = connection.prepareStatement(selectSql)) {
+            ps.setString(1, config.getName());
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return rs.getLong("id");
+        }
+        return -1;
+    }
+
     public List<Configuration> getAllConfigurations() throws SQLException {
         List<Configuration> list = new ArrayList<>();
         String sql = "SELECT name, compile_command, run_command FROM Configurations ORDER BY name";
@@ -134,6 +152,35 @@ public class DatabaseManager {
         }
     }
 
+    public long upsertProject(String name, long configId) throws SQLException {
+        String findSql = "SELECT id FROM Projects WHERE name = ?";
+        try (PreparedStatement ps = connection.prepareStatement(findSql)) {
+            ps.setString(1, name);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                long existingId = rs.getLong("id");
+                String updateSql = "UPDATE Projects SET config_id = ? WHERE id = ?";
+                try (PreparedStatement ups = connection.prepareStatement(updateSql)) {
+                    ups.setLong(1, configId);
+                    ups.setLong(2, existingId);
+                    ups.executeUpdate();
+                }
+                return existingId;
+            }
+        }
+        return insertProject(name, configId);
+    }
+
+    public long findProjectIdByName(String name) throws SQLException {
+        String sql = "SELECT id FROM Projects WHERE name = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, name);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return rs.getLong("id");
+        }
+        return -1;
+    }
+
     //Test Cases
 
     public long insertTestCase(long projectId, TestCase testCase) throws SQLException {
@@ -159,6 +206,14 @@ public class DatabaseManager {
             }
         }
         return list;
+    }
+
+    public void deleteTestCasesForProject(long projectId) throws SQLException {
+        String sql = "DELETE FROM TestCases WHERE project_id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, projectId);
+            ps.executeUpdate();
+        }
     }
 
     //Submits
@@ -207,6 +262,52 @@ public class DatabaseManager {
             ps.setLong(2, submissionId);
             ps.executeUpdate();
         }
+    }
+
+    public long findSubmissionId(long projectId, String studentId) throws SQLException {
+        String sql = "SELECT id FROM StudentSubmissions WHERE project_id = ? AND student_id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, projectId);
+            ps.setString(2, studentId);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return rs.getLong("id");
+        }
+        return -1;
+    }
+
+    public void updateSubmission(long submissionId,
+                                 StudentZipSubmission submission,
+                                 String output,
+                                 String errorMessage) throws SQLException {
+        String sql = """
+            UPDATE StudentSubmissions
+            SET zip_path = ?, extracted_path = ?, status = ?, output = ?, error_message = ?
+            WHERE id = ?
+            """;
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, submission.getZipFile().getAbsolutePath());
+            ps.setString(2, submission.getExtractedFolder() == null ? null
+                    : submission.getExtractedFolder().getAbsolutePath());
+            ps.setString(3, submission.getResult() == null ? "PENDING"
+                    : submission.getResult().getStatus().name());
+            ps.setString(4, output);
+            ps.setString(5, errorMessage);
+            ps.setLong(6, submissionId);
+            ps.executeUpdate();
+        }
+    }
+
+    public long upsertSubmission(long projectId, StudentZipSubmission submission) throws SQLException {
+        Result result = submission.getResult();
+        String output = result == null ? "" : result.getOutput();
+        String errorMessage = result == null ? "" : result.getErrorMessage();
+
+        long existingId = findSubmissionId(projectId, submission.getStudentId());
+        if (existingId > 0) {
+            updateSubmission(existingId, submission, output, errorMessage);
+            return existingId;
+        }
+        return insertSubmission(projectId, submission, output, errorMessage);
     }
 
     //Detailed Results

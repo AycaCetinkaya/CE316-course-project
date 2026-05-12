@@ -46,12 +46,12 @@ public class ProjectRunnerService {
                     continue;
                 }
 
-                // --- Persistence Logic (Version A) ---
                 if (projectId == -1) {
                     try {
-                        long configId = db.insertConfiguration(config);
-                        projectId = db.insertProject(projectName, configId);
+                        long configId = db.upsertConfiguration(config);
+                        projectId = db.upsertProject(projectName, configId);
 
+                        db.deleteTestCasesForProject(projectId);
                         for (TestCase tc : testCases) {
                             db.insertTestCase(projectId, tc);
                         }
@@ -60,34 +60,30 @@ public class ProjectRunnerService {
                     }
                 }
 
-                // --- Evaluation ---
                 List<StudentZipSubmission> single = new ArrayList<>();
                 single.add(submission);
 
                 Project singleProject = new Project(projectName, config, single, testCases);
                 evaluationService.evaluateProject(singleProject);
 
-                // --- Save Submission Results (Version A) ---
                 try {
-                    long submissionId = db.insertSubmission(projectId, submission);
-                    if (submission.getResult() != null) {
-                        db.updateSubmissionStatus(submissionId, submission.getResult().getStatus());
-                    }
+                    db.upsertSubmission(projectId, submission);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
         } finally {
-            // Ensure disconnect happens regardless of loop success
             db.disconnect();
         }
 
-        return new Project(
+        Project resultProject = new Project(
                 projectName,
                 new Configuration(selectedLanguage.toString(), "", ""),
                 submissions,
                 testCases
         );
+        resultProject.setId(projectId);
+        return resultProject;
     }
 
     private Language detectLanguage(File folder) {

@@ -719,6 +719,67 @@ public class IAEGui extends JFrame {
             JOptionPane.showMessageDialog(this, "Evaluation failed: " + ex.getMessage());
         }
     }
+    private void rerunCurrentProject() {
+        if (currentProject == null) {
+            JOptionPane.showMessageDialog(this, "No project selected.");
+            return;
+        }
+
+        int confirm = JOptionPane.showConfirmDialog(
+                this,
+                "Re-run '" + currentProject.getName() + "'? Existing results will be replaced.",
+                "Confirm Re-run",
+                JOptionPane.YES_NO_OPTION
+        );
+        if (confirm != JOptionPane.YES_OPTION) return;
+
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Select submissions folder");
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        int result = chooser.showOpenDialog(this);
+        if (result != JFileChooser.APPROVE_OPTION) return;
+
+        File submissionsDir = chooser.getSelectedFile();
+
+        try {
+            ProjectRunnerService runner = new ProjectRunnerService();
+            runner.runProject(
+                    currentProject.getName(),
+                    submissionsDir,
+                    currentProject.getTestCases(),
+                    Language.AUTO
+            );
+
+            DatabaseManager db = new DatabaseManager();
+            db.connect();
+            List<Project> refreshed = db.getProjects();
+            db.disconnect();
+
+            recentProjects.clear();
+            recentProjects.addAll(refreshed);
+
+            Project updated = null;
+            for (Project p : refreshed) {
+                if (p.getName().equals(currentProject.getName())) {
+                    updated = p;
+                    break;
+                }
+            }
+
+            if (updated != null) {
+                currentProject = updated;
+                openEvaluationResults(updated);
+            } else {
+                refreshDashboard();
+            }
+
+            JOptionPane.showMessageDialog(this, "Project re-evaluated successfully.");
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Re-run failed: " + ex.getMessage());
+        }
+    }
+
     private Language mapLanguage(String selected) {
         switch (selected) {
             case "AUTO":
@@ -1008,10 +1069,13 @@ public class IAEGui extends JFrame {
         topActions.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JButton btnProjectDetails = createSecondaryButton("▧  Project Details");
+        JButton btnRerun = createSecondaryButton("↻  Re-run");
         JButton btnExport = createOrangeButton("⇩  Export Results");
 
+        btnRerun.addActionListener(e -> rerunCurrentProject());
         btnExport.addActionListener(e -> JOptionPane.showMessageDialog(this, "Export feature will be added next."));
         topActions.add(btnProjectDetails);
+        topActions.add(btnRerun);
         topActions.add(btnExport);
 
         JPanel stats = new JPanel(new GridLayout(1, 4, 14, 0));

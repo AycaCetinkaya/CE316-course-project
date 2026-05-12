@@ -10,6 +10,7 @@ public class Project {
     public Project(String name, Configuration configuration,
                    List<StudentZipSubmission> submissions,
                    List<TestCase> testCases) {
+        this.id = -1;
         this.name = name;
         this.configuration = configuration;
         this.submissions = submissions;
