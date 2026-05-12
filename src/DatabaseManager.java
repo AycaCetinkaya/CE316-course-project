@@ -65,6 +65,8 @@ public class DatabaseManager {
                 zip_path       TEXT    NOT NULL,
                 extracted_path TEXT,
                 status         TEXT    NOT NULL DEFAULT 'PENDING',
+                output         TEXT,
+                error_message  TEXT,
                 FOREIGN KEY (project_id) REFERENCES Projects(id)
             )
             """,
@@ -162,10 +164,24 @@ public class DatabaseManager {
     //Submits
 
     public long insertSubmission(long projectId, StudentZipSubmission submission) throws SQLException {
+        Result result = submission.getResult();
+
+        String output = result == null ? "" : result.getOutput();
+        String errorMessage = result == null ? "" : result.getErrorMessage();
+
+        return insertSubmission(projectId, submission, output, errorMessage);
+    }
+
+    public long insertSubmission(long projectId,
+                                 StudentZipSubmission submission,
+                                 String output,
+                                 String errorMessage) throws SQLException {
         String sql = """
-            INSERT INTO StudentSubmissions (project_id, student_id, zip_path, extracted_path, status)
-            VALUES (?, ?, ?, ?, ?)
-            """;
+        INSERT INTO StudentSubmissions 
+        (project_id, student_id, zip_path, extracted_path, status, output, error_message)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """;
+
         try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setLong(1, projectId);
             ps.setString(2, submission.getStudentId());
@@ -174,7 +190,11 @@ public class DatabaseManager {
                     : submission.getExtractedFolder().getAbsolutePath());
             ps.setString(5, submission.getResult() == null ? "PENDING"
                     : submission.getResult().getStatus().name());
+            ps.setString(6, output);
+            ps.setString(7, errorMessage);
+
             ps.executeUpdate();
+
             ResultSet keys = ps.getGeneratedKeys();
             return keys.next() ? keys.getLong(1) : -1;
         }
@@ -230,7 +250,9 @@ public class DatabaseManager {
                 List<TestCase> testCases = getTestCasesForProject(projectId);
                 List<StudentZipSubmission> submissions = getSubmissionsForProject(projectId);
 
-                projects.add(new Project(projectName, config, submissions, testCases));
+                Project project = new Project(projectName, config, submissions, testCases);
+                project.setId(projectId);
+                projects.add(project);
             }
         }
 
@@ -241,7 +263,7 @@ public class DatabaseManager {
         List<StudentZipSubmission> submissions = new ArrayList<>();
 
         String sql = """
-        SELECT student_id, zip_path, extracted_path, status
+        SELECT student_id, zip_path, extracted_path, status, output, error_message
         FROM StudentSubmissions
         WHERE project_id = ?
     """;
@@ -264,7 +286,11 @@ public class DatabaseManager {
 
                 String statusStr = rs.getString("status");
                 Status status = Status.valueOf(statusStr);
-                submission.setResult(new Result(status, "", ""));
+
+                String output = rs.getString("output");
+                String errorMessage = rs.getString("error_message");
+
+                submission.setResult(new Result(status, output, errorMessage));
 
                 submissions.add(submission);
             }
