@@ -43,6 +43,7 @@ public class IAEGui extends JFrame {
         setTitle("IAE - Integrated Assignment Environment");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1400, 850);
+        setMinimumSize(new Dimension(1000, 650));
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
@@ -77,12 +78,12 @@ public class IAEGui extends JFrame {
     }
 
     private void addPages() {
-        mainContentPanel.add(createDashboardPanel(), "dashboard");
-        mainContentPanel.add(createCreateProjectPanel(), "createProject");
-        mainContentPanel.add(createConfigurationsPanel(), "configurations");
-        mainContentPanel.add(createHelpPanel(), "help");
-        mainContentPanel.add(createEvaluationResultsPanel(), "evaluationResults");
-        mainContentPanel.add(createStudentDetailsPanel(), "studentDetails");
+        mainContentPanel.add(wrapWithScroll(createDashboardPanel()), "dashboard");
+        mainContentPanel.add(wrapWithScroll(createCreateProjectPanel()), "createProject");
+        mainContentPanel.add(wrapWithScroll(createConfigurationsPanel()), "configurations");
+        mainContentPanel.add(wrapWithScroll(createHelpPanel()), "help");
+        mainContentPanel.add(wrapWithScroll(createEvaluationResultsPanel()), "evaluationResults");
+        mainContentPanel.add(wrapWithScroll(createStudentDetailsPanel()), "studentDetails");
     }
 
     private JPanel createSidebar() {
@@ -152,9 +153,12 @@ public class IAEGui extends JFrame {
         topBarTitle.setFont(FONT_BODY);
         topBarTitle.setForeground(TEXT_SECONDARY);
 
-        JLabel right = new JLabel("Lecturer Mode   L   ");
+        JLabel right = new JLabel("Lecturer Mode");
         right.setFont(FONT_BODY);
         right.setForeground(TEXT_SECONDARY);
+        right.setBorder(new EmptyBorder(0, 0, 0, 24));
+        right.setHorizontalAlignment(SwingConstants.RIGHT);
+        right.setPreferredSize(new Dimension(160, 48));
 
         topBar.add(topBarTitle, BorderLayout.WEST);
         topBar.add(right, BorderLayout.EAST);
@@ -182,7 +186,7 @@ public class IAEGui extends JFrame {
             String text = value == null ? "" : value.toString();
             label.setText(text);
 
-            if (column == 2 || column == 3 || column == 4) {
+            if (column == 1 || column == 2 || column == 3) {
                 if (text.contains("Success") || text.contains("Match")) {
                     label.setForeground(new Color(5, 150, 105));
                     label.setText("◎ " + text);
@@ -195,7 +199,7 @@ public class IAEGui extends JFrame {
                 } else {
                     label.setForeground(TEXT_SECONDARY);
                 }
-            } else if (column == 5) {
+            } else if (column == 4) {
                 label.setHorizontalAlignment(SwingConstants.CENTER);
 
                 if (text.equals("Passed")) {
@@ -203,9 +207,10 @@ public class IAEGui extends JFrame {
                 } else {
                     label.setText("<html><span style='background:#FEE2E2;color:#DC2626;padding:4px 10px;'>Failed</span></html>");
                 }
-            } else if (column == 6) {
+            } else if (column == 5) {
                 label.setHorizontalAlignment(SwingConstants.CENTER);
                 label.setForeground(new Color(19, 99, 128));
+                label.setText("<html><u>Student Details</u></html>");
             } else {
                 label.setHorizontalAlignment(SwingConstants.LEFT);
                 label.setForeground(TEXT_PRIMARY);
@@ -661,13 +666,7 @@ public class IAEGui extends JFrame {
         content.add(filesCard);
         content.add(Box.createVerticalStrut(20));
 
-        JScrollPane scrollPane = new JScrollPane(content);
-        scrollPane.setBorder(null);
-        scrollPane.getViewport().setBackground(BG_CANVAS);
-        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-
-        panel.add(scrollPane, BorderLayout.CENTER);
+        panel.add(content, BorderLayout.CENTER);
         panel.add(buttons, BorderLayout.SOUTH);
 
         return panel;
@@ -1122,7 +1121,7 @@ public class IAEGui extends JFrame {
         tableHeader.add(search, BorderLayout.EAST);
 
         String[] columns = {
-                "Student ID ↕", "Name", "Compile Status", "Run Status",
+                "Student ID ↕", "Compile Status", "Run Status",
                 "Output Status", "Final Result", "Actions"
         };
 
@@ -1138,12 +1137,11 @@ public class IAEGui extends JFrame {
 
             model.addRow(new Object[]{
                     s.getStudentId(),
-                    s.getStudentId(),
                     getCompileStatus(status),
                     getRunStatus(status),
                     getOutputStatus(status),
                     getFinalStatus(status),
-                    "◎"
+                    "Student Details"
             });
         }
 
@@ -1181,7 +1179,7 @@ public class IAEGui extends JFrame {
                 int row = table.rowAtPoint(e.getPoint());
                 int col = table.columnAtPoint(e.getPoint());
 
-                if (row >= 0 && col == 6) {
+                if (row >= 0 && col == 5) {
                     int modelRow = table.convertRowIndexToModel(row);
                     StudentZipSubmission submission = currentProject.getSubmissions().get(modelRow);
                     openStudentDetails(submission);
@@ -1201,7 +1199,6 @@ public class IAEGui extends JFrame {
         content.add(stats);
         content.add(Box.createVerticalStrut(20));
         content.add(tableCard);
-
         panel.add(content, BorderLayout.CENTER);
         return panel;
     }
@@ -1355,7 +1352,15 @@ public class IAEGui extends JFrame {
 
         String expectedOutput = "(No expected output)";
         if (currentProject != null && currentProject.getTestCases() != null && !currentProject.getTestCases().isEmpty()) {
-            expectedOutput = currentProject.getTestCases().get(0).getExpectedOutput();
+            StringBuilder sb = new StringBuilder();
+
+            for (int i = 0; i < currentProject.getTestCases().size(); i++) {
+                TestCase tc = currentProject.getTestCases().get(i);
+                sb.append("Test Case ").append(i + 1).append(":\n");
+                sb.append(tc.getExpectedOutput()).append("\n\n");
+            }
+
+            expectedOutput = sb.toString().trim();
         }
 
         outputGrid.add(createOutputBlock("Program Output", programOutput, false));
@@ -1563,5 +1568,15 @@ public class IAEGui extends JFrame {
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btn.setAlignmentX(Component.LEFT_ALIGNMENT);
         return btn;
+    }
+    private JScrollPane wrapWithScroll(JPanel panel) {
+        JScrollPane scrollPane = new JScrollPane(panel);
+        scrollPane.setBorder(null);
+        scrollPane.getViewport().setBackground(BG_CANVAS);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        scrollPane.getHorizontalScrollBar().setUnitIncrement(16);
+        return scrollPane;
     }
 }
