@@ -660,9 +660,16 @@ public class IAEGui extends JFrame {
         content.add(Box.createVerticalStrut(20));
         content.add(filesCard);
         content.add(Box.createVerticalStrut(20));
-        content.add(buttons);
 
-        panel.add(content, BorderLayout.CENTER);
+        JScrollPane scrollPane = new JScrollPane(content);
+        scrollPane.setBorder(null);
+        scrollPane.getViewport().setBackground(BG_CANVAS);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+
+        panel.add(scrollPane, BorderLayout.CENTER);
+        panel.add(buttons, BorderLayout.SOUTH);
+
         return panel;
     }
     private String getRealText(JTextField field, String placeholder) {
@@ -945,6 +952,7 @@ public class IAEGui extends JFrame {
         btn.setBackground(new Color(241, 245, 249));
         btn.setForeground(TEXT_PRIMARY);
         btn.setFocusPainted(false);
+        btn.setOpaque(true);
         btn.setBorder(new EmptyBorder(9, 16, 9, 16));
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         return btn;
@@ -956,6 +964,7 @@ public class IAEGui extends JFrame {
         btn.setBackground(new Color(19, 99, 128));
         btn.setForeground(Color.WHITE);
         btn.setFocusPainted(false);
+        btn.setOpaque(true);
         btn.setBorder(new EmptyBorder(9, 18, 9, 18));
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         return btn;
@@ -967,6 +976,7 @@ public class IAEGui extends JFrame {
         btn.setBackground(ACCENT_ORANGE);
         btn.setForeground(Color.WHITE);
         btn.setFocusPainted(false);
+        btn.setOpaque(true);
         btn.setBorder(new EmptyBorder(9, 18, 9, 18));
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         return btn;
