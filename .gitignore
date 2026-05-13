@@ -18,3 +18,8 @@ test-submissions/*/
 
 # Keep Zip files
 !test-submissions/*.zip
+
+# Database Files
+*.db
+*.sqlite
+*.sqlite3

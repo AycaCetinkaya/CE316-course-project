@@ -651,7 +651,7 @@ public class IAEGui extends JFrame {
                 return;
             }
 
-            Language language = mapLanguage(selected);
+            Configuration selectedConfig = getSelectedConfiguration(selected);
 
             List<TestCase> testCases = new ArrayList<>();
 
@@ -674,7 +674,7 @@ public class IAEGui extends JFrame {
                     projectName,
                     new File(submissionsPath),
                     testCases,
-                    language
+                    selectedConfig
             );
 
             recentProjects.add(project);
@@ -686,6 +686,19 @@ public class IAEGui extends JFrame {
             ex.printStackTrace();
             JOptionPane.showMessageDialog(this, "Evaluation failed: " + ex.getMessage());
         }
+    }
+    private Configuration getSelectedConfiguration(String selected) {
+        if (selected == null || selected.equals("AUTO")) {
+            return null;
+        }
+
+        for (Configuration config : allConfigs) {
+            if (config.getName().equals(selected)) {
+                return config;
+            }
+        }
+
+        return null;
     }
     private void rerunCurrentProject() {
         if (currentProject == null) {
@@ -715,7 +728,7 @@ public class IAEGui extends JFrame {
                     currentProject.getName(),
                     submissionsDir,
                     currentProject.getTestCases(),
-                    Language.AUTO
+                    currentProject.getConfiguration()
             );
 
             DatabaseManager db = new DatabaseManager();

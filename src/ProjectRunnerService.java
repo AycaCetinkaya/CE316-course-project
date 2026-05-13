@@ -7,7 +7,7 @@ public class ProjectRunnerService {
     public Project runProject(String projectName,
                               File submissionsDir,
                               List<TestCase> testCases,
-                              Language selectedLanguage) throws ZipServiceException {
+                              Configuration selectedConfig) throws ZipServiceException {
 
         // --- Database Setup (Version A) ---
         DatabaseManager db = new DatabaseManager();
@@ -31,11 +31,16 @@ public class ProjectRunnerService {
                     continue;
                 }
 
-                Language actualLanguage = selectedLanguage == Language.AUTO
-                        ? detectLanguage(submission.getExtractedFolder())
-                        : selectedLanguage;
+                Configuration config;
+                Language actualLanguage = null;
+                boolean customConfigSelected = selectedConfig != null;
 
-                Configuration config = getConfig(actualLanguage, submission.getExtractedFolder());
+                if (customConfigSelected) {
+                    config = selectedConfig;
+                } else {
+                    actualLanguage = detectLanguage(submission.getExtractedFolder());
+                    config = getConfig(actualLanguage, submission.getExtractedFolder());
+                }
 
                 if (config == null) {
                     submission.setResult(new Result(
@@ -46,7 +51,9 @@ public class ProjectRunnerService {
                     continue;
                 }
 
-                String mainFile = findMainFileName(actualLanguage, submission.getExtractedFolder(), config);
+                String mainFile = customConfigSelected
+                        ? findMainFileNameByConfig(submission.getExtractedFolder(), config)
+                        : findMainFileName(actualLanguage, submission.getExtractedFolder(), config);
 
                 if (mainFile == null) {
                     submission.setResult(new Result(Status.RUNTIME_ERROR, "", "Main file not found."));
@@ -95,7 +102,7 @@ public class ProjectRunnerService {
 
         Project resultProject = new Project(
                 projectName,
-                new Configuration(selectedLanguage.toString(), "", ""),
+                selectedConfig != null ? selectedConfig : new Configuration("AUTO", "", ""),
                 submissions,
                 testCases
         );
@@ -221,6 +228,40 @@ public class ProjectRunnerService {
                 }
             }
         }
+        return null;
+    }
+    private String findMainFileNameByConfig(File folder, Configuration config) {
+        String extension = config.getSourceExtension();
+        String pattern = config.getEntryPointPattern();
+
+        File fallback = null;
+
+        for (File file : getAllFiles(folder)) {
+            String fileName = file.getName();
+
+            if (extension != null && !extension.isEmpty() && !fileName.endsWith(extension)) {
+                continue;
+            }
+
+            if (fallback == null) {
+                fallback = file;
+            }
+
+            try {
+                String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
+
+                if (pattern != null && !pattern.isEmpty()) {
+                    if (content.matches("(?s).*" + pattern + ".*")) {
+                        return fileName.replace(extension, "");
+                    }
+                }
+            } catch (Exception ignored) { }
+        }
+
+        if (fallback != null) {
+            return fallback.getName().replace(extension, "");
+        }
+
         return null;
     }
 }
