@@ -21,15 +21,45 @@ public class ConfigStore {
         this.defaultFile = defaultFile;
     }
 
+    public List<Configuration> getDefaultConfigs() {
+        List<Configuration> defaults = new ArrayList<>();
+        defaults.add(new Configuration("Java Default", "JAVA", "javac *.java", "java $MAIN", ".java", "public\\s+static\\s+void\\s+main"));
+        defaults.add(new Configuration("Python Default", "PYTHON", "echo skip", "python3 $MAIN", ".py", "if\\s+__name__\\s*==\\s*[\"']__main__[\"']"));
+        defaults.add(new Configuration("C Default", "C", "gcc *.c -o main", "./main", ".c", "int\\s+main\\s*\\("));
+        defaults.add(new Configuration("Haskell Default", "HASKELL", "ghc --make $MAIN -o main", "./main", ".hs", "\\bmain\\s*[:=]"));
+        return defaults;
+    }
+
     public File getDefaultFile() {
         return defaultFile;
     }
 
     public List<Configuration> loadAll() {
-        if (defaultFile == null || !defaultFile.exists()) {
-            return new ArrayList<>();
+        List<Configuration> loaded = new ArrayList<>();
+        if (defaultFile != null && defaultFile.exists()) {
+            loaded = loadFrom(defaultFile);
         }
-        return loadFrom(defaultFile);
+
+        List<Configuration> defaults = getDefaultConfigs();
+        boolean changed = false;
+
+        for (Configuration def : defaults) {
+            boolean exists = false;
+            for (Configuration current : loaded) {
+                if (current.getName().equalsIgnoreCase(def.getName())) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                loaded.add(def);
+                changed = true;
+            }
+        }
+        if (changed) {
+            saveAll(loaded);
+        }
+        return loaded;
     }
 
     public void saveAll(List<Configuration> configs) {
@@ -45,6 +75,7 @@ public class ConfigStore {
 
         try {
             String content = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+            if (content.trim().isEmpty()) return configs;
             List<String> objects = JsonUtil.splitTopLevelObjects(content);
 
             for (String obj : objects) {

@@ -5,9 +5,7 @@ import java.awt.event.*;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.TableRowSorter;
+import javax.swing.table.*;
 
 public class IAEGui extends JFrame {
     private StudentZipSubmission currentSubmission;
@@ -15,6 +13,8 @@ public class IAEGui extends JFrame {
     private Project currentProject;
     private JPanel mainContentPanel;
     private CardLayout cardLayout;
+    private List<Configuration> allConfigs;
+    private ConfigStore configStore;
 
     private JButton btnDashboard, btnCreateProject, btnConfigurations, btnHelp;
 
@@ -40,6 +40,15 @@ public class IAEGui extends JFrame {
     private final Font FONT_BODY = new Font("SansSerif", Font.PLAIN, 13);
 
     public IAEGui() {
+        this.configStore = new ConfigStore();
+        this.allConfigs = configStore.loadAll();
+        if (this.allConfigs.isEmpty()) {
+            allConfigs.add(new Configuration("C Config", "C", "gcc *.c -o main", "./main", ".c", "int\\s+main"));
+            allConfigs.add(new Configuration("Java Config", "JAVA", "javac *.java", "java $MAIN", ".java", "public\\s+static\\s+void\\s+main"));
+            allConfigs.add(new Configuration("Python Config", "PYTHON", "echo skip", "python3 $MAIN", ".py", "if\\s+__name__\\s*==.*main"));
+            allConfigs.add(new Configuration("Haskell Config", "HASKELL", "ghc --make $MAIN -o main", "./main", ".hs", "\\bmain\\s*[:=]"));
+            configStore.saveAll(allConfigs);
+        }
         setTitle("IAE - Integrated Assignment Environment");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1400, 850);
@@ -601,11 +610,14 @@ public class IAEGui extends JFrame {
         txtProjectName = createTextField("e.g., Data Structures - Assignment 1");
 
         cmbConfiguration = new JComboBox<>();
-        cmbConfiguration.addItem("AUTO");
-        cmbConfiguration.addItem("C Language");
-        cmbConfiguration.addItem("Java");
-        cmbConfiguration.addItem("Python 3");
-        cmbConfiguration.addItem("Haskell");
+        updateConfigDropdown();
+        List<String> configNames = new ArrayList<>();
+        for (Configuration c : allConfigs) {
+            configNames.add(c.getName());
+        }
+        configNames.add(0, "AUTO");
+
+        cmbConfiguration = new JComboBox<>(configNames.toArray(new String[0]));
         cmbConfiguration.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
         cmbConfiguration.setPreferredSize(new Dimension(0, 38));
         cmbConfiguration.setFont(FONT_BODY);
@@ -831,7 +843,321 @@ public class IAEGui extends JFrame {
     }
 
     private JPanel createConfigurationsPanel() {
-        return createPageBase("Configuration Management", "Manage programming language configurations");
+        JPanel panel = createPageBase(
+                "Configuration Management",
+                "Manage programming language configurations for compilation and execution"
+        );
+
+        JButton btnImport = createSecondaryButton("📥  Import");
+        JButton btnExport = createSecondaryButton("📤  Export");
+        JButton btnAdd = createOrangeButton("+  Add Configuration");
+
+        btnAdd.addActionListener(e -> showConfigForm(null));
+
+        btnImport.addActionListener(e -> {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Import Configurations");
+            fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON Files", "json"));
+
+            if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File selectedFile = fileChooser.getSelectedFile();
+                try {
+                    List<Configuration> importedConfigs = configStore.loadFrom(selectedFile);
+
+                    if (importedConfigs != null && !importedConfigs.isEmpty()) {
+                        allConfigs.addAll(importedConfigs);
+                        configStore.saveAll(allConfigs);
+                        refreshConfigPage();
+
+                        JOptionPane.showMessageDialog(this, importedConfigs.size() + " configurations imported.");
+                    } else {
+                        JOptionPane.showMessageDialog(this, "The file is empty or invalid.", "Error", JOptionPane.ERROR_MESSAGE);
+                    }
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(this, "Import failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        btnExport.addActionListener(e -> {
+            if (allConfigs.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Nothing to export.");
+                return;
+            }
+
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Export Configurations");
+            fileChooser.setSelectedFile(new File("exported_configs.json"));
+
+            if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File saveFile = fileChooser.getSelectedFile();
+                try {
+                    configStore.saveTo(saveFile, allConfigs);
+                    JOptionPane.showMessageDialog(this, "Configurations exported successfully to:\n" + saveFile.getAbsolutePath());
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(this, "Export failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        Dimension actionBtnSize = new Dimension(120, 38);
+        btnImport.setPreferredSize(actionBtnSize);
+        btnExport.setPreferredSize(actionBtnSize);
+        btnAdd.setPreferredSize(new Dimension(170, 38));
+
+        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        actionPanel.setBackground(BG_CANVAS);
+        actionPanel.add(btnImport);
+        actionPanel.add(btnExport);
+        actionPanel.add(btnAdd);
+
+        JPanel existingHeader = (JPanel) ((BorderLayout) panel.getLayout()).getLayoutComponent(BorderLayout.NORTH);
+        JPanel topMasterPanel = new JPanel(new BorderLayout());
+        topMasterPanel.setBackground(BG_CANVAS);
+        topMasterPanel.add(existingHeader, BorderLayout.WEST);
+        topMasterPanel.add(actionPanel, BorderLayout.EAST);
+        topMasterPanel.setBorder(new EmptyBorder(0, 0, 20, 0));
+
+        panel.add(topMasterPanel, BorderLayout.NORTH);
+
+        String[] columns = {"Language", "Config Name", "Compile Command", "Run Command", "Extension", "Actions"};
+
+        DefaultTableModel model = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return column == 5;
+            }
+        };
+
+        for (Configuration config : allConfigs) {
+            model.addRow(new Object[]{
+                    config.getLanguage(),
+                    config.getName(),
+                    config.getCompileCommand(),
+                    config.getRunCommand(),
+                    config.getSourceExtension(),
+                    config
+            });
+        }
+
+        JTable table = new JTable(model);
+        table.setRowHeight(75);
+        table.setShowGrid(false);
+        table.setIntercellSpacing(new Dimension(0, 10));
+        table.setBackground(BG_CANVAS);
+
+        table.getTableHeader().setFont(FONT_SUBHEADER);
+        table.getTableHeader().setBackground(new Color(248, 250, 252));
+        table.getTableHeader().setPreferredSize(new Dimension(0, 45));
+        table.getTableHeader().setBorder(new MatteBorder(0, 0, 1, 0, BORDER_COLOR));
+
+        ConfigTableRenderer contentRenderer = new ConfigTableRenderer();
+        for (int i = 0; i < table.getColumnCount() - 1; i++) {
+            table.getColumnModel().getColumn(i).setCellRenderer(contentRenderer);
+        }
+
+        table.getColumnModel().getColumn(5).setCellRenderer(new ActionButtonRenderer());
+        table.getColumnModel().getColumn(5).setCellEditor(new ActionButtonEditor());
+
+        JScrollPane scrollPane = new JScrollPane(table);
+        scrollPane.setBorder(new LineBorder(BORDER_COLOR, 1, true));
+        scrollPane.getViewport().setBackground(Color.WHITE);
+
+        JPanel footerPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 15));
+        footerPanel.setBackground(new Color(255, 251, 242));
+        footerPanel.setBorder(new LineBorder(new Color(253, 230, 138), 1, true));
+
+        JLabel lblTemplate = new JLabel("<html><b style='color:#D97706;'>&lt;&gt; Configuration Templates</b><br>" +
+                "<span style='color:#92400E;'>Use placeholders in your commands: $MAIN, {source}, {output}</span></html>");
+        lblTemplate.setFont(FONT_BODY);
+        footerPanel.add(lblTemplate);
+
+        JPanel contentWrapper = new JPanel(new BorderLayout(0, 20));
+        contentWrapper.setBackground(BG_CANVAS);
+        contentWrapper.add(scrollPane, BorderLayout.CENTER);
+        contentWrapper.add(footerPanel, BorderLayout.SOUTH);
+
+        panel.add(contentWrapper, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    private class ActionButtonRenderer extends DefaultTableCellRenderer {
+        private final ActionButtonsPanel panel = new ActionButtonsPanel();
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value,
+                                                       boolean isSelected, boolean hasFocus, int row, int column) {
+            panel.setBackground(isSelected ? table.getSelectionBackground() : Color.WHITE);
+            return panel;
+        }
+    }
+
+    private class ActionButtonEditor extends AbstractCellEditor implements TableCellEditor {
+        private final ActionButtonsPanel panel = new ActionButtonsPanel();
+        private Configuration currentConfig;
+
+        public ActionButtonEditor() {
+            panel.btnEdit.addActionListener(e -> {
+                stopCellEditing();
+                if (currentConfig != null) {
+                    showConfigForm(currentConfig);
+                }
+            });
+
+            panel.btnDelete.addActionListener(e -> {
+                stopCellEditing();
+                if (currentConfig != null) {
+                    int confirm = JOptionPane.showConfirmDialog(panel,
+                            "Delete configuration: " + currentConfig.getName() + "?", "Confirm", JOptionPane.YES_NO_OPTION);
+                    if (confirm == JOptionPane.YES_OPTION) {
+                        allConfigs.remove(currentConfig);
+                        configStore.saveAll(allConfigs);
+                        refreshConfigPage();
+                    }
+                }
+            });
+        }
+
+        @Override
+        public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
+            if (value instanceof Configuration) {
+                currentConfig = (Configuration) value;
+            }
+            panel.setBackground(table.getSelectionBackground());
+            return panel;
+        }
+
+        @Override
+        public Object getCellEditorValue() {
+            return currentConfig;
+        }
+    }
+
+    private class ActionButtonsPanel extends JPanel {
+        public final JButton btnEdit = new JButton("✎");
+        public final JButton btnDelete = new JButton("🗑");
+
+        public ActionButtonsPanel() {
+            setLayout(new FlowLayout(FlowLayout.CENTER, 8, 20));
+            setBackground(Color.WHITE);
+            styleActionButton(btnEdit, TEXT_PRIMARY);
+            styleActionButton(btnDelete, new Color(220, 38, 38));
+            add(btnEdit);
+            add(btnDelete);
+        }
+
+        private void styleActionButton(JButton btn, Color color) {
+            btn.setFont(new Font("SansSerif", Font.PLAIN, 18));
+            btn.setForeground(color);
+            btn.setBackground(new Color(241, 245, 249));
+            btn.setBorder(new LineBorder(BORDER_COLOR, 1, true));
+            btn.setFocusPainted(false);
+            btn.setPreferredSize(new Dimension(40, 35));
+            btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        }
+    }
+
+    private class ConfigTableRenderer extends DefaultTableCellRenderer {
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                                                       boolean hasFocus, int row, int column) {
+            JPanel cell = new JPanel(new BorderLayout());
+            cell.setBackground(isSelected ? table.getSelectionBackground() : Color.WHITE);
+            cell.setBorder(new EmptyBorder(5, 15, 5, 15));
+
+            String text = (value != null) ? value.toString() : "";
+
+            if (column >= 2 && column <= 4) {
+                JLabel code = new JLabel(text);
+                code.setOpaque(true);
+                code.setBackground(new Color(241, 245, 249));
+                code.setFont(new Font("Monospaced", Font.PLAIN, 12));
+                code.setBorder(new EmptyBorder(4, 8, 4, 8));
+                cell.add(code, BorderLayout.WEST);
+            } else {
+                JLabel label = new JLabel("<html>" + text.replace("\n", "<br>") + "</html>");
+                label.setFont(FONT_BODY);
+                label.setForeground(column == 0 ? TEXT_PRIMARY : TEXT_SECONDARY);
+                cell.add(label, BorderLayout.CENTER);
+            }
+            return cell;
+        }
+    }
+
+    private void showConfigForm(Configuration config) {
+        JDialog dialog = new JDialog((Frame)null, config == null ? "Add Configuration" : "Edit Configuration", true);
+        dialog.setLayout(new BorderLayout());
+
+        JPanel formPanel = new JPanel(new GridLayout(6, 2, 10, 10));
+        formPanel.setBorder(new EmptyBorder(20, 20, 20, 20));
+
+        JTextField nameField = new JTextField(config != null ? config.getName() : "");
+        JTextField langField = new JTextField(config != null ? config.getLanguage() : "");
+        JTextField compileField = new JTextField(config != null ? config.getCompileCommand() : "");
+        JTextField runField = new JTextField(config != null ? config.getRunCommand() : "");
+        JTextField extField = new JTextField(config != null ? config.getSourceExtension() : "");
+        JTextField patternField = new JTextField(config != null ? config.getEntryPointPattern() : "");
+
+        formPanel.add(new JLabel("Config Name:")); formPanel.add(nameField);
+        formPanel.add(new JLabel("Language:")); formPanel.add(langField);
+        formPanel.add(new JLabel("Compile Command:")); formPanel.add(compileField);
+        formPanel.add(new JLabel("Run Command:")); formPanel.add(runField);
+        formPanel.add(new JLabel("Source Extension:")); formPanel.add(extField);
+        formPanel.add(new JLabel("Entry Pattern (Regex):")); formPanel.add(patternField);
+
+        JButton btnSave = createStyledButton("Save Configuration", true);
+        btnSave.addActionListener(e -> {
+            Configuration newConfig = new Configuration(
+                    nameField.getText(), langField.getText(), compileField.getText(),
+                    runField.getText(), extField.getText(), patternField.getText()
+            );
+
+            if (config != null) allConfigs.remove(config);
+            allConfigs.add(newConfig);
+            configStore.saveAll(allConfigs);
+            dialog.dispose();
+            refreshConfigPage();
+        });
+
+        dialog.add(formPanel, BorderLayout.CENTER);
+        dialog.add(btnSave, BorderLayout.SOUTH);
+        dialog.pack();
+        dialog.setLocationRelativeTo(null);
+        dialog.setVisible(true);
+    }
+
+    private void refreshConfigPage() {
+        mainContentPanel.add(createConfigurationsPanel(), "CONFIGURATIONS");
+        updateConfigDropdown();
+        cardLayout.show(mainContentPanel, "CONFIGURATIONS");
+    }
+
+    private JButton createStyledButton(String text, boolean primary) {
+        JButton btn = new JButton(text);
+
+        btn.setFont(new Font("SansSerif", Font.BOLD, 13));
+        btn.setFocusPainted(false);
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setBorder(new EmptyBorder(8, 16, 8, 16));
+
+        if (primary) {
+            btn.setBackground(ACCENT_ORANGE);
+            btn.setForeground(Color.WHITE);
+        } else {
+            btn.setBackground(Color.WHITE);
+            btn.setForeground(SIDEBAR_COLOR);
+            btn.setBorder(new LineBorder(new Color(203, 213, 225), 1));
+        }
+        return btn;
+    }
+
+    private void updateConfigDropdown() {
+        if (cmbConfiguration == null) return;
+        cmbConfiguration.removeAllItems();
+        for (Configuration config : allConfigs) {
+            cmbConfiguration.addItem(config.getName());
+        }
     }
 
     private JPanel createHelpPanel() {
@@ -1508,7 +1834,6 @@ public class IAEGui extends JFrame {
         area.setLineWrap(true);
         area.setWrapStyleWord(true);
 
-        // 🔥 EN ÖNEMLİ KISIM (AUTO HEIGHT)
         int lines = area.getLineCount();
         int height = Math.max(80, lines * 18 + 20);
         area.setPreferredSize(new Dimension(1000, height));

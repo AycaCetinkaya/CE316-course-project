@@ -37,6 +37,22 @@ public class ProjectRunnerService {
 
                 Configuration config = getConfig(actualLanguage, submission.getExtractedFolder());
 
+                String mainFile = findMainFileName(actualLanguage, submission.getExtractedFolder(), config);
+
+                if (mainFile == null) {
+                    submission.setResult(new Result(Status.RUNTIME_ERROR, "", "Main file not found."));
+                    continue;
+                }
+
+                Configuration studentConfig = new Configuration(
+                        config.getName(),
+                        config.getLanguage(),
+                        config.getCompileCommand().replace("$MAIN", mainFile),
+                        config.getRunCommand().replace("$MAIN", mainFile),
+                        config.getSourceExtension(),
+                        config.getEntryPointPattern()
+                );
+
                 if (config == null) {
                     submission.setResult(new Result(
                             Status.RUNTIME_ERROR,
@@ -63,7 +79,7 @@ public class ProjectRunnerService {
                 List<StudentZipSubmission> single = new ArrayList<>();
                 single.add(submission);
 
-                Project singleProject = new Project(projectName, config, single, testCases);
+                Project singleProject = new Project(projectName, studentConfig, single, testCases);
                 evaluationService.evaluateProject(singleProject);
 
                 try {
@@ -101,52 +117,16 @@ public class ProjectRunnerService {
         return Language.UNKNOWN;
     }
 
-    private Configuration getConfig(Language language, File folder) {
-        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+    private Configuration getConfig(Language lang, File folder) {
+        ConfigStore store = new ConfigStore();
+        List<Configuration> configs = store.loadAll();
 
-        switch (language) {
-            case C:
-                return new Configuration(
-                        "C Config",
-                        "gcc *.c -o main",
-                        isWindows ? "main.exe" : "./main"
-                );
-
-            case JAVA:
-                String mainClass = findMainClass(folder);
-                if (mainClass == null) return null;
-
-                return new Configuration(
-                        "Java Config",
-                        "javac *.java",
-                        "java " + mainClass
-                );
-
-            case PYTHON:
-                // --- Improved Detection (Version B) ---
-                String mainPython = findMainPythonFile(folder);
-                if (mainPython == null) return null;
-
-                return new Configuration(
-                        "Python Config",
-                        "echo skip",
-                        (isWindows ? "python " : "python3 ") + mainPython
-                );
-
-            case HASKELL:
-                // --- Improved Detection (Version B) ---
-                String mainHaskell = findMainHaskellFile(folder);
-                if (mainHaskell == null) return null;
-
-                return new Configuration(
-                        "Haskell Config",
-                        "ghc --make " + mainHaskell + " -o main",
-                        isWindows ? "main.exe" : "./main"
-                );
-
-            default:
-                return null;
+        for (Configuration config : configs) {
+            if (config.getLanguage().equalsIgnoreCase(lang.name())) {
+                return config;
+            }
         }
+        return null;
     }
 
     private List<File> getAllFiles(File folder) {
@@ -220,6 +200,24 @@ public class ProjectRunnerService {
         for (File file : getAllFiles(folder)) {
             String name = file.getName();
             if (name.endsWith(".hs") || name.endsWith(".lhs")) return name;
+        }
+        return null;
+    }
+
+    private String findMainFileName(Language lang, File folder, Configuration config) {
+        if (lang == Language.JAVA) return findMainClass(folder);
+        if (lang == Language.PYTHON) return findMainPythonFile(folder);
+        if (lang == Language.HASKELL) return findMainHaskellFile(folder);
+        if (lang == Language.C) {
+            for (File f : getAllFiles(folder)) if (f.getName().endsWith(".c")) return f.getName();
+        }
+        String ext = config.getSourceExtension();
+        if (ext != null && !ext.isEmpty()) {
+            for (File f : getAllFiles(folder)) {
+                if (f.getName().endsWith(ext)) {
+                    return f.getName();
+                }
+            }
         }
         return null;
     }
