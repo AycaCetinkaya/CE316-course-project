@@ -38,6 +38,8 @@ public class IAEGui extends JFrame {
     private final Font FONT_HEADER = new Font("SansSerif", Font.BOLD, 24);
     private final Font FONT_SUBHEADER = new Font("SansSerif", Font.BOLD, 15);
     private final Font FONT_BODY = new Font("SansSerif", Font.PLAIN, 13);
+    private int resultsPage = 1;
+    private final int resultsPerPage = 8;
 
     public IAEGui() {
         this.configStore = new ConfigStore();
@@ -173,60 +175,6 @@ public class IAEGui extends JFrame {
         topBar.add(right, BorderLayout.EAST);
 
         return topBar;
-    }
-    private class EvaluationTableRenderer extends DefaultTableCellRenderer {
-        @Override
-        public Component getTableCellRendererComponent(
-                JTable table, Object value, boolean isSelected,
-                boolean hasFocus, int row, int column) {
-
-            JLabel label = (JLabel) super.getTableCellRendererComponent(
-                    table, value, isSelected, hasFocus, row, column
-            );
-
-            label.setFont(FONT_BODY);
-            label.setBorder(new EmptyBorder(0, 14, 0, 14));
-            label.setOpaque(true);
-
-            if (!isSelected) {
-                label.setBackground(row % 2 == 0 ? Color.WHITE : new Color(248, 250, 252));
-            }
-
-            String text = value == null ? "" : value.toString();
-            label.setText(text);
-
-            if (column == 1 || column == 2 || column == 3) {
-                if (text.contains("Success") || text.contains("Match")) {
-                    label.setForeground(new Color(5, 150, 105));
-                    label.setText("◎ " + text);
-                } else if (text.contains("Failed") || text.contains("Mismatch")) {
-                    label.setForeground(new Color(220, 38, 38));
-                    label.setText("⊗ " + text);
-                } else if (text.contains("Error")) {
-                    label.setForeground(ACCENT_ORANGE);
-                    label.setText("! " + text);
-                } else {
-                    label.setForeground(TEXT_SECONDARY);
-                }
-            } else if (column == 4) {
-                label.setHorizontalAlignment(SwingConstants.CENTER);
-
-                if (text.equals("Passed")) {
-                    label.setText("<html><span style='background:#DCFCE7;color:#059669;padding:4px 10px;'>Passed</span></html>");
-                } else {
-                    label.setText("<html><span style='background:#FEE2E2;color:#DC2626;padding:4px 10px;'>Failed</span></html>");
-                }
-            } else if (column == 5) {
-                label.setHorizontalAlignment(SwingConstants.CENTER);
-                label.setForeground(new Color(19, 99, 128));
-                label.setText("<html><u>Student Details</u></html>");
-            } else {
-                label.setHorizontalAlignment(SwingConstants.LEFT);
-                label.setForeground(TEXT_PRIMARY);
-            }
-
-            return label;
-        }
     }
     private RoundedMenuButton createMenuButton(String text) {
         RoundedMenuButton btn = new RoundedMenuButton(text);
@@ -1469,16 +1417,33 @@ public class IAEGui extends JFrame {
         mainContentPanel.repaint();
     }
     private JPanel createEvaluationResultsPanel() {
-        JPanel panel = createPageBase(
-                "Evaluation Results",
-                currentProject == null ? "No project selected" : currentProject.getName()
-        );
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(BG_CANVAS);
+        panel.setBorder(new EmptyBorder(28, 40, 35, 40));
 
         if (currentProject == null) {
+            JPanel headerOnly = new JPanel();
+            headerOnly.setLayout(new BoxLayout(headerOnly, BoxLayout.Y_AXIS));
+            headerOnly.setBackground(BG_CANVAS);
+
+            JLabel titleLabel = new JLabel("Evaluation Results");
+            titleLabel.setFont(FONT_HEADER);
+            titleLabel.setForeground(TEXT_PRIMARY);
+
+            JLabel subtitleLabel = new JLabel("No project selected");
+            subtitleLabel.setFont(FONT_BODY);
+            subtitleLabel.setForeground(TEXT_SECONDARY);
+            subtitleLabel.setBorder(new EmptyBorder(8, 0, 25, 0));
+
             JLabel empty = new JLabel("No evaluation results available.");
             empty.setFont(FONT_BODY);
             empty.setForeground(TEXT_SECONDARY);
-            panel.add(empty, BorderLayout.CENTER);
+
+            headerOnly.add(titleLabel);
+            headerOnly.add(subtitleLabel);
+            headerOnly.add(empty);
+
+            panel.add(headerOnly, BorderLayout.NORTH);
             return panel;
         }
 
@@ -1494,165 +1459,80 @@ public class IAEGui extends JFrame {
 
         int passRate = total == 0 ? 0 : (int) Math.round((passed * 100.0) / total);
 
-        JPanel content = new JPanel();
-        content.setBackground(BG_CANVAS);
-        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-        content.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JPanel headerRow = new JPanel(new BorderLayout());
+        headerRow.setBackground(BG_CANVAS);
+        headerRow.setBorder(new EmptyBorder(0, 0, 28, 0));
 
-        JPanel topActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        JPanel titleBox = new JPanel();
+        titleBox.setLayout(new BoxLayout(titleBox, BoxLayout.Y_AXIS));
+        titleBox.setBackground(BG_CANVAS);
+
+        JLabel titleLabel = new JLabel("Evaluation Results");
+        titleLabel.setFont(FONT_HEADER);
+        titleLabel.setForeground(TEXT_PRIMARY);
+
+        JLabel subtitleLabel = new JLabel(currentProject.getName());
+        subtitleLabel.setFont(FONT_BODY);
+        subtitleLabel.setForeground(TEXT_SECONDARY);
+        subtitleLabel.setBorder(new EmptyBorder(8, 0, 0, 0));
+
+        titleBox.add(titleLabel);
+        titleBox.add(subtitleLabel);
+
+        JPanel topActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 18, 0));
         topActions.setBackground(BG_CANVAS);
-        topActions.setMaximumSize(new Dimension(1050, 40));
-        topActions.setAlignmentX(Component.LEFT_ALIGNMENT);
+        topActions.setBorder(new EmptyBorder(6, 0, 0, 0));
 
-        JButton btnProjectDetails = createSecondaryButton("▧  Project Details");
-        JButton btnRerun = createSecondaryButton("↻  Re-run");
-        JButton btnExport = createOrangeButton("⇩  Export Results");
+        JButton btnProjectDetails = createToolbarButton("file", "Project Details", false);
+        JButton btnRerun = createToolbarButton("refresh", "Re-run", false);
+        JButton btnExport = createToolbarButton("download", "Export Results", true);
+
+        btnProjectDetails.setPreferredSize(new Dimension(170, 46));
+        btnRerun.setPreferredSize(new Dimension(125, 46));
+        btnExport.setPreferredSize(new Dimension(170, 46));
 
         btnRerun.addActionListener(e -> rerunCurrentProject());
         btnExport.addActionListener(e -> JOptionPane.showMessageDialog(this, "Export feature will be added next."));
+
         topActions.add(btnProjectDetails);
         topActions.add(btnRerun);
         topActions.add(btnExport);
 
-        JPanel stats = new JPanel(new GridLayout(1, 4, 14, 0));
-        stats.setBackground(BG_CANVAS);
-        stats.setMaximumSize(new Dimension(1050, 78));
-        stats.setPreferredSize(new Dimension(1050, 78));
-        stats.setAlignmentX(Component.LEFT_ALIGNMENT);
+        headerRow.add(titleBox, BorderLayout.WEST);
+        headerRow.add(topActions, BorderLayout.EAST);
 
-        stats.add(createResultStatCard(String.valueOf(total), "Total Students", TEXT_PRIMARY, BG_CARD, BORDER_COLOR));
-        stats.add(createResultStatCard(String.valueOf(passed), "Passed", new Color(5, 150, 105), new Color(236, 253, 245), new Color(167, 243, 208)));
-        stats.add(createResultStatCard(String.valueOf(failed), "Failed", new Color(220, 38, 38), new Color(254, 242, 242), new Color(252, 165, 165)));
-        stats.add(createResultStatCard(passRate + "%", "Pass Rate", ACCENT_ORANGE, new Color(255, 247, 237), new Color(253, 186, 116)));
+        JPanel content = new JPanel(new BorderLayout(24, 0));
+        content.setBackground(BG_CANVAS);
 
-        JPanel tableCard = new JPanel(new BorderLayout());
-        tableCard.setBackground(BG_CARD);
-        tableCard.setMaximumSize(new Dimension(1050, 430));
-        tableCard.setPreferredSize(new Dimension(1050, 430));
-        tableCard.setAlignmentX(Component.LEFT_ALIGNMENT);
-        tableCard.setBorder(new LineBorder(BORDER_COLOR, 1, true));
+        JPanel tableCard = createModernStudentResultsTable();
+        tableCard.setPreferredSize(new Dimension(950, 620));
 
-        JPanel tableHeader = new JPanel(new BorderLayout());
-        tableHeader.setBackground(BG_CARD);
-        tableHeader.setBorder(new EmptyBorder(14, 16, 14, 16));
+        JPanel rightArea = new JPanel();
+        rightArea.setBackground(BG_CANVAS);
+        rightArea.setLayout(new BoxLayout(rightArea, BoxLayout.Y_AXIS));
+        rightArea.setPreferredSize(new Dimension(340, 620));
 
-        JLabel title = new JLabel("Student Results");
-        title.setFont(FONT_SUBHEADER);
-        title.setForeground(TEXT_PRIMARY);
+        rightArea.add(createSideStatCard("Total Students", String.valueOf(total), "users",
+                new Color(37, 99, 235), new Color(219, 234, 254)));
+        rightArea.add(Box.createVerticalStrut(14));
 
-        JTextField search = createTextField("Search by ID or name...");
-        search.setPreferredSize(new Dimension(220, 36));
-        search.setMaximumSize(new Dimension(220, 36));
+        rightArea.add(createSideStatCard("Passed", String.valueOf(passed), "check",
+                new Color(22, 163, 74), new Color(220, 252, 231)));
+        rightArea.add(Box.createVerticalStrut(14));
 
-        tableHeader.add(title, BorderLayout.WEST);
-        tableHeader.add(search, BorderLayout.EAST);
+        rightArea.add(createSideStatCard("Failed", String.valueOf(failed), "x",
+                new Color(220, 38, 38), new Color(254, 226, 226)));
+        rightArea.add(Box.createVerticalStrut(14));
 
-        String[] columns = {
-                "Student ID ↕", "Compile Status", "Run Status",
-                "Output Status", "Final Result", "Actions"
-        };
+        rightArea.add(createPassRateCard(passRate, passed, total));
 
-        DefaultTableModel model = new DefaultTableModel(columns, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
-        };
+        content.add(tableCard, BorderLayout.CENTER);
+        content.add(rightArea, BorderLayout.EAST);
 
-        for (StudentZipSubmission s : currentProject.getSubmissions()) {
-            Status status = s.getResult() == null ? null : s.getResult().getStatus();
-
-            model.addRow(new Object[]{
-                    s.getStudentId(),
-                    getCompileStatus(status),
-                    getRunStatus(status),
-                    getOutputStatus(status),
-                    getFinalStatus(status),
-                    "Student Details"
-            });
-        }
-
-        JTable table = new JTable(model);
-        table.setRowHeight(52);
-        table.setFont(FONT_BODY);
-        table.setShowVerticalLines(false);
-        table.setGridColor(BORDER_COLOR);
-        table.setBackground(Color.WHITE);
-        table.setSelectionBackground(new Color(255, 251, 247));
-
-        table.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 13));
-        table.getTableHeader().setBackground(new Color(241, 245, 249));
-        table.getTableHeader().setForeground(TEXT_PRIMARY);
-        table.getTableHeader().setPreferredSize(new Dimension(0, 42));
-        table.getTableHeader().setBorder(new MatteBorder(0, 0, 1, 0, BORDER_COLOR));
-
-        table.setDefaultRenderer(Object.class, new EvaluationTableRenderer());
-
-        TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(model);
-        table.setRowSorter(sorter);
-
-        search.addKeyListener(new KeyAdapter() {
-            @Override
-            public void keyReleased(KeyEvent e) {
-                String text = getRealText(search, "Search by ID or name...");
-                if (text.isEmpty()) sorter.setRowFilter(null);
-                else sorter.setRowFilter(RowFilter.regexFilter("(?i)" + text));
-            }
-        });
-
-        table.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                int row = table.rowAtPoint(e.getPoint());
-                int col = table.columnAtPoint(e.getPoint());
-
-                if (row >= 0 && col == 5) {
-                    int modelRow = table.convertRowIndexToModel(row);
-                    StudentZipSubmission submission = currentProject.getSubmissions().get(modelRow);
-                    openStudentDetails(submission);
-                }
-            }
-        });
-
-        JScrollPane scroll = new JScrollPane(table);
-        scroll.setBorder(null);
-        scroll.getViewport().setBackground(Color.WHITE);
-
-        tableCard.add(tableHeader, BorderLayout.NORTH);
-        tableCard.add(scroll, BorderLayout.CENTER);
-
-        content.add(topActions);
-        content.add(Box.createVerticalStrut(12));
-        content.add(stats);
-        content.add(Box.createVerticalStrut(20));
-        content.add(tableCard);
+        panel.add(headerRow, BorderLayout.NORTH);
         panel.add(content, BorderLayout.CENTER);
+
         return panel;
-    }
-    private JPanel createResultStatCard(String value, String label, Color valueColor, Color bgColor, Color borderColor) {
-        JPanel card = new JPanel();
-        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBackground(bgColor);
-        card.setBorder(BorderFactory.createCompoundBorder(
-                new LineBorder(borderColor, 1, true),
-                new EmptyBorder(14, 16, 14, 16)
-        ));
-
-        JLabel valueLabel = new JLabel(value);
-        valueLabel.setFont(new Font("SansSerif", Font.BOLD, 22));
-        valueLabel.setForeground(valueColor);
-        valueLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel textLabel = new JLabel(label);
-        textLabel.setFont(FONT_BODY);
-        textLabel.setForeground(TEXT_SECONDARY);
-        textLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        card.add(valueLabel);
-        card.add(Box.createVerticalStrut(6));
-        card.add(textLabel);
-
-        return card;
     }
 
     private String getCompileStatus(Status status) {
@@ -2004,5 +1884,537 @@ public class IAEGui extends JFrame {
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
         scrollPane.getHorizontalScrollBar().setUnitIncrement(16);
         return scrollPane;
+    }
+    private JPanel createModernStudentResultsTable() {
+        JPanel tableCard = new JPanel(new BorderLayout());
+        tableCard.setBackground(BG_CARD);
+        tableCard.setBorder(new LineBorder(BORDER_COLOR, 1, true));
+
+        JPanel tableHeader = new JPanel(new BorderLayout());
+        tableHeader.setBackground(BG_CARD);
+        tableHeader.setBorder(new EmptyBorder(20, 22, 20, 22));
+
+        JLabel title = new JLabel("Student Results");
+        title.setFont(new Font("SansSerif", Font.BOLD, 18));
+        title.setForeground(TEXT_PRIMARY);
+
+        JTextField search = createTextField("Search by ID or name...");
+        search.setPreferredSize(new Dimension(300, 40));
+        search.setMaximumSize(new Dimension(300, 40));
+
+        tableHeader.add(title, BorderLayout.WEST);
+        tableHeader.add(search, BorderLayout.EAST);
+
+        String[] columns = {
+                "STUDENT ID", "COMPILE STATUS", "RUN STATUS",
+                "OUTPUT STATUS", "FINAL RESULT", "ACTIONS"
+        };
+
+        DefaultTableModel model = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+
+        int totalRows = currentProject.getSubmissions().size();
+        int totalPages = Math.max(1, (int) Math.ceil(totalRows / (double) resultsPerPage));
+
+        if (resultsPage > totalPages) resultsPage = totalPages;
+        if (resultsPage < 1) resultsPage = 1;
+
+        int start = (resultsPage - 1) * resultsPerPage;
+        int end = Math.min(start + resultsPerPage, totalRows);
+
+        for (int i = start; i < end; i++) {
+            StudentZipSubmission s = currentProject.getSubmissions().get(i);
+            Status status = s.getResult() == null ? null : s.getResult().getStatus();
+
+            model.addRow(new Object[]{
+                    s.getStudentId(),
+                    getCompileStatus(status),
+                    getRunStatus(status),
+                    getOutputStatus(status),
+                    getFinalStatus(status),
+                    "Student Details  ›"
+            });
+        }
+
+        JTable table = new JTable(model);
+        table.setRowHeight(68);
+        table.setFont(FONT_BODY);
+        table.setShowGrid(false);
+        table.setIntercellSpacing(new Dimension(0, 0));
+        table.setFillsViewportHeight(true);
+        table.setBackground(Color.WHITE);
+        table.setSelectionBackground(new Color(239, 246, 255));
+        table.setDefaultRenderer(Object.class, new ModernEvaluationTableRenderer());
+
+        table.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 12));
+        table.getTableHeader().setBackground(new Color(248, 250, 252));
+        table.getTableHeader().setForeground(new Color(71, 85, 105));
+        table.getTableHeader().setPreferredSize(new Dimension(0, 52));
+        table.getTableHeader().setBorder(new MatteBorder(1, 0, 1, 0, BORDER_COLOR));
+
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                int row = table.rowAtPoint(e.getPoint());
+                int col = table.columnAtPoint(e.getPoint());
+
+                if (row >= 0 && col == 5) {
+                    int realIndex = start + row;
+                    StudentZipSubmission submission = currentProject.getSubmissions().get(realIndex);
+                    openStudentDetails(submission);
+                }
+            }
+        });
+
+        JPanel tableHolder = new JPanel(new BorderLayout());
+        tableHolder.setBackground(Color.WHITE);
+        tableHolder.add(table.getTableHeader(), BorderLayout.NORTH);
+        tableHolder.add(table, BorderLayout.CENTER);
+
+        JPanel footer = new JPanel(new BorderLayout());
+        footer.setBackground(BG_CARD);
+        footer.setBorder(new EmptyBorder(14, 22, 14, 22));
+
+        JLabel showing = new JLabel(
+                "Showing " + (totalRows == 0 ? 0 : start + 1) + " to " + end + " of " + totalRows + " results"
+        );
+        showing.setFont(FONT_BODY);
+        showing.setForeground(TEXT_SECONDARY);
+
+        JPanel pagination = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0));
+        pagination.setBackground(BG_CARD);
+
+        JButton prev = createSecondaryButton("«");
+        JButton page = createBluePrimaryButton(String.valueOf(resultsPage));
+        JButton next = createSecondaryButton("»");
+
+        prev.setPreferredSize(new Dimension(44, 36));
+        page.setPreferredSize(new Dimension(44, 36));
+        next.setPreferredSize(new Dimension(44, 36));
+
+        prev.setEnabled(resultsPage > 1);
+        next.setEnabled(resultsPage < totalPages);
+
+        prev.addActionListener(e -> {
+            if (resultsPage > 1) {
+                resultsPage--;
+                openEvaluationResults(currentProject);
+            }
+        });
+
+        next.addActionListener(e -> {
+            if (resultsPage < totalPages) {
+                resultsPage++;
+                openEvaluationResults(currentProject);
+            }
+        });
+
+        pagination.add(prev);
+        pagination.add(page);
+        pagination.add(next);
+
+        JButton perPage = createSecondaryButton(resultsPerPage + " per page  ⌄");
+        perPage.setPreferredSize(new Dimension(125, 36));
+
+        footer.add(showing, BorderLayout.WEST);
+        footer.add(pagination, BorderLayout.CENTER);
+        footer.add(perPage, BorderLayout.EAST);
+
+        tableCard.add(tableHeader, BorderLayout.NORTH);
+        tableCard.add(tableHolder, BorderLayout.CENTER);
+        tableCard.add(footer, BorderLayout.SOUTH);
+
+        return tableCard;
+    }
+
+    private JPanel createSideStatCard(String title, String value, String iconType, Color accent, Color softBg) {
+        JPanel card = new JPanel(new BorderLayout(18, 0));
+        card.setBackground(BG_CARD);
+        card.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(BORDER_COLOR, 1, true),
+                new EmptyBorder(18, 18, 18, 18)
+        ));
+        card.setMaximumSize(new Dimension(340, 110));
+        card.setPreferredSize(new Dimension(340, 110));
+
+        RoundedPanel iconBox = new RoundedPanel(18, softBg);
+        iconBox.setLayout(new GridBagLayout());
+        iconBox.setPreferredSize(new Dimension(72, 72));
+        iconBox.setMinimumSize(new Dimension(72, 72));
+        iconBox.setMaximumSize(new Dimension(72, 72));
+
+        JLabel icon = new JLabel(createUiIcon(iconType, accent, 40));
+        iconBox.add(icon);
+
+        JPanel textBox = new JPanel();
+        textBox.setBackground(BG_CARD);
+        textBox.setLayout(new BoxLayout(textBox, BoxLayout.Y_AXIS));
+
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 14));
+        titleLabel.setForeground(TEXT_PRIMARY);
+
+        JLabel valueLabel = new JLabel(value);
+        valueLabel.setFont(new Font("SansSerif", Font.BOLD, 34));
+        valueLabel.setForeground(accent);
+
+        textBox.add(titleLabel);
+        textBox.add(Box.createVerticalStrut(8));
+        textBox.add(valueLabel);
+
+        card.add(iconBox, BorderLayout.WEST);
+        card.add(textBox, BorderLayout.CENTER);
+
+        return card;
+    }
+
+    private JPanel createPassRateCard(int passRate, int passed, int total) {
+        JPanel card = new JPanel(new BorderLayout());
+        card.setBackground(BG_CARD);
+        card.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(BORDER_COLOR, 1, true),
+                new EmptyBorder(18, 18, 18, 18)
+        ));
+        card.setMaximumSize(new Dimension(340, 270));
+        card.setPreferredSize(new Dimension(340, 270));
+
+        JLabel title = new JLabel("Pass Rate");
+        title.setFont(FONT_SUBHEADER);
+        title.setForeground(TEXT_PRIMARY);
+
+        PassRateCirclePanel circle = new PassRateCirclePanel(passRate);
+        circle.setPreferredSize(new Dimension(250, 175));
+
+        JLabel summary = new JLabel(passed + " out of " + total + " students passed", SwingConstants.CENTER);
+        summary.setFont(FONT_BODY);
+        summary.setForeground(TEXT_SECONDARY);
+
+        card.add(title, BorderLayout.NORTH);
+        card.add(circle, BorderLayout.CENTER);
+        card.add(summary, BorderLayout.SOUTH);
+
+        return card;
+    }
+
+    private JButton createBluePrimaryButton(String text) {
+        JButton btn = new JButton(text);
+        btn.setFont(new Font("SansSerif", Font.BOLD, 13));
+        btn.setBackground(new Color(37, 99, 235));
+        btn.setForeground(Color.WHITE);
+        btn.setFocusPainted(false);
+        btn.setOpaque(true);
+        btn.setBorder(new EmptyBorder(9, 18, 9, 18));
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        return btn;
+    }
+    private class PassRateCirclePanel extends JPanel {
+        private final int percent;
+
+        public PassRateCirclePanel(int percent) {
+            this.percent = percent;
+            setOpaque(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            int size = 150;
+            int x = (getWidth() - size) / 2;
+            int y = 8;
+
+            g2.setStroke(new BasicStroke(14, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+
+            g2.setColor(new Color(226, 232, 240));
+            g2.drawArc(x, y, size, size, 0, 360);
+
+            g2.setColor(new Color(34, 197, 94));
+            int angle = (int) Math.round(360 * (percent / 100.0));
+            g2.drawArc(x, y, size, size, 90, -angle);
+
+            g2.setFont(new Font("SansSerif", Font.BOLD, 34));
+            g2.setColor(new Color(22, 163, 74));
+            String text = percent + "%";
+            FontMetrics fm = g2.getFontMetrics();
+            int tx = (getWidth() - fm.stringWidth(text)) / 2;
+            int ty = y + size / 2 + 10;
+            g2.drawString(text, tx, ty);
+
+            g2.setFont(FONT_BODY);
+            g2.setColor(TEXT_SECONDARY);
+            String label = "Pass Rate";
+            FontMetrics fm2 = g2.getFontMetrics();
+            g2.drawString(label, (getWidth() - fm2.stringWidth(label)) / 2, ty + 28);
+
+            g2.dispose();
+        }
+    }
+
+    private class ModernEvaluationTableRenderer extends DefaultTableCellRenderer {
+        @Override
+        public Component getTableCellRendererComponent(
+                JTable table, Object value, boolean isSelected,
+                boolean hasFocus, int row, int column) {
+
+            String text = value == null ? "" : value.toString();
+
+            if (column >= 1 && column <= 4) {
+                JPanel wrapper = new JPanel(new GridBagLayout());
+                wrapper.setOpaque(true);
+                wrapper.setBackground(isSelected ? table.getSelectionBackground() : Color.WHITE);
+                wrapper.setBorder(new EmptyBorder(0, 12, 0, 12));
+
+                RoundedStatusBadge badge;
+
+                if (text.contains("Success") || text.contains("Match") || text.equals("Passed")) {
+                    badge = new RoundedStatusBadge(
+                            text,
+                            new Color(220, 252, 231),
+                            new Color(5, 150, 105),
+                            column == 4 ? null : "check"
+                    );
+                } else if (text.contains("Failed") || text.contains("Mismatch")) {
+                    badge = new RoundedStatusBadge(
+                            text,
+                            new Color(254, 226, 226),
+                            new Color(220, 38, 38),
+                            column == 4 ? null : "x"
+                    );
+                } else if (text.contains("Error")) {
+                    badge = new RoundedStatusBadge(
+                            text,
+                            new Color(255, 237, 213),
+                            new Color(234, 88, 12),
+                            "warning"
+                    );
+                } else {
+                    badge = new RoundedStatusBadge(
+                            text,
+                            new Color(241, 245, 249),
+                            new Color(71, 85, 105),
+                            null
+                    );
+                }
+
+                wrapper.add(badge);
+                return wrapper;
+            }
+
+            JLabel label = (JLabel) super.getTableCellRendererComponent(
+                    table, value, isSelected, hasFocus, row, column
+            );
+
+            label.setFont(FONT_BODY);
+            label.setOpaque(true);
+            label.setBorder(new EmptyBorder(0, 20, 0, 20));
+            label.setBackground(isSelected ? table.getSelectionBackground() : Color.WHITE);
+
+            if (column == 5) {
+                label.setHorizontalAlignment(SwingConstants.CENTER);
+                label.setForeground(new Color(37, 99, 235));
+                label.setFont(new Font("SansSerif", Font.BOLD, 13));
+                label.setText("Student Details  ›");
+            } else {
+                label.setHorizontalAlignment(SwingConstants.LEFT);
+                label.setForeground(TEXT_PRIMARY);
+                label.setText(text);
+            }
+
+            return label;
+        }
+    }
+    private JButton createToolbarButton(String iconType, String text, boolean primary) {
+        JButton btn = new JButton(text);
+        btn.setIcon(createUiIcon(iconType, primary ? Color.WHITE : TEXT_PRIMARY, 18));
+        btn.setIconTextGap(10);
+        btn.setFont(new Font("SansSerif", Font.BOLD, 14));
+        btn.setFocusPainted(false);
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setOpaque(true);
+        btn.setHorizontalAlignment(SwingConstants.CENTER);
+
+        if (primary) {
+            btn.setBackground(new Color(37, 99, 235));
+            btn.setForeground(Color.WHITE);
+            btn.setBorder(BorderFactory.createCompoundBorder(
+                    new LineBorder(new Color(37, 99, 235), 1, true),
+                    new EmptyBorder(11, 18, 11, 18)
+            ));
+        } else {
+            btn.setBackground(Color.WHITE);
+            btn.setForeground(TEXT_PRIMARY);
+            btn.setBorder(BorderFactory.createCompoundBorder(
+                    new LineBorder(new Color(203, 213, 225), 1, true),
+                    new EmptyBorder(11, 18, 11, 18)
+            ));
+        }
+
+        return btn;
+    }
+    private class RoundedStatusBadge extends JLabel {
+        private final Color bg;
+
+        public RoundedStatusBadge(String text, Color bg, Color fg, String iconType) {
+            super(text);
+            this.bg = bg;
+
+            setForeground(fg);
+            setFont(new Font("SansSerif", Font.BOLD, 12));
+            setBorder(new EmptyBorder(7, 14, 7, 14));
+            setOpaque(false);
+
+            if (iconType != null) {
+                setIcon(createUiIcon(iconType, fg, 14));
+                setIconTextGap(6);
+            }
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            g2.setColor(bg);
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+    private Icon createUiIcon(String type, Color color, int size) {
+        return new UiIcon(type, color, size);
+    }
+
+    private class UiIcon implements Icon {
+        private final String type;
+        private final Color color;
+        private final int size;
+
+        public UiIcon(String type, Color color, int size) {
+            this.type = type;
+            this.color = color;
+            this.size = size;
+        }
+
+        @Override
+        public int getIconWidth() {
+            return size;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return size;
+        }
+
+        @Override
+        public void paintIcon(Component c, Graphics g, int x, int y) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(color);
+            g2.setStroke(new BasicStroke(Math.max(2f, size / 10f), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+
+            int s = size;
+            int cx = x + s / 2;
+            int cy = y + s / 2;
+
+            switch (type) {
+                case "file":
+                    g2.drawRoundRect(x + s / 4, y + s / 8, s / 2, s * 3 / 4, 3, 3);
+                    g2.drawLine(x + s * 5 / 8, y + s / 8, x + s * 3 / 4, y + s / 4);
+                    g2.drawLine(x + s * 3 / 4, y + s / 4, x + s * 3 / 4, y + s / 3);
+                    break;
+
+                case "refresh":
+                    g2.drawArc(x + s / 5, y + s / 5, s * 3 / 5, s * 3 / 5, 35, 285);
+                    g2.drawLine(x + s * 3 / 4, y + s / 3, x + s * 7 / 8, y + s / 3);
+                    g2.drawLine(x + s * 3 / 4, y + s / 3, x + s * 3 / 4, y + s / 5);
+                    break;
+
+                case "download":
+                    g2.drawLine(cx, y + s / 5, cx, y + s * 3 / 5);
+                    g2.drawLine(cx, y + s * 3 / 5, x + s / 3, y + s / 2);
+                    g2.drawLine(cx, y + s * 3 / 5, x + s * 2 / 3, y + s / 2);
+                    g2.drawLine(x + s / 4, y + s * 4 / 5, x + s * 3 / 4, y + s * 4 / 5);
+                    break;
+
+                case "users":
+                    g2.drawOval(x + s / 3, y + s / 6, s / 3, s / 3);
+                    g2.drawArc(x + s / 4, y + s / 2, s / 2, s / 3, 0, 180);
+
+                    g2.drawOval(x + s / 12, y + s / 3, s / 4, s / 4);
+                    g2.drawArc(x, y + s * 3 / 5, s / 3, s / 4, 0, 180);
+
+                    g2.drawOval(x + s * 2 / 3, y + s / 3, s / 4, s / 4);
+                    g2.drawArc(x + s * 2 / 3, y + s * 3 / 5, s / 3, s / 4, 0, 180);
+                    break;
+
+                case "check":
+                    g2.drawLine(x + s / 4, y + s / 2, x + s * 2 / 5, y + s * 2 / 3);
+                    g2.drawLine(x + s * 2 / 5, y + s * 2 / 3, x + s * 3 / 4, y + s / 3);
+                    break;
+
+                case "x":
+                    g2.drawLine(x + s / 4, y + s / 4, x + s * 3 / 4, y + s * 3 / 4);
+                    g2.drawLine(x + s * 3 / 4, y + s / 4, x + s / 4, y + s * 3 / 4);
+                    break;
+
+                case "checkCircle":
+                    g2.drawOval(x + s / 8, y + s / 8, s * 3 / 4, s * 3 / 4);
+                    g2.drawLine(x + s / 3, y + s / 2, x + s * 9 / 20, y + s * 13 / 20);
+                    g2.drawLine(x + s * 9 / 20, y + s * 13 / 20, x + s * 2 / 3, y + s / 3);
+                    break;
+
+                case "xCircle":
+                    g2.drawOval(x + s / 8, y + s / 8, s * 3 / 4, s * 3 / 4);
+                    g2.drawLine(x + s / 3, y + s / 3, x + s * 2 / 3, y + s * 2 / 3);
+                    g2.drawLine(x + s * 2 / 3, y + s / 3, x + s / 3, y + s * 2 / 3);
+                    break;
+
+                case "warning":
+                    Polygon triangle = new Polygon();
+                    triangle.addPoint(cx, y + s / 8);
+                    triangle.addPoint(x + s * 7 / 8, y + s * 7 / 8);
+                    triangle.addPoint(x + s / 8, y + s * 7 / 8);
+                    g2.drawPolygon(triangle);
+                    g2.drawLine(cx, y + s / 3, cx, y + s * 3 / 5);
+                    g2.fillOval(cx - 1, y + s * 7 / 10, 3, 3);
+                    break;
+
+                default:
+                    g2.fillOval(cx - 2, cy - 2, 4, 4);
+                    break;
+            }
+
+            g2.dispose();
+        }
+    }
+    private static class RoundedPanel extends JPanel {
+        private final int radius;
+        private final Color bgColor;
+
+        public RoundedPanel(int radius, Color bgColor) {
+            this.radius = radius;
+            this.bgColor = bgColor;
+            setOpaque(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            g2.setColor(bgColor);
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), radius, radius);
+
+            g2.dispose();
+            super.paintComponent(g);
+        }
     }
 }
