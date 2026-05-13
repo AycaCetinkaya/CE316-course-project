@@ -6,6 +6,8 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.table.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 
 public class IAEGui extends JFrame {
     private StudentZipSubmission currentSubmission;
@@ -1917,29 +1919,6 @@ public class IAEGui extends JFrame {
             }
         };
 
-        int totalRows = currentProject.getSubmissions().size();
-        int totalPages = Math.max(1, (int) Math.ceil(totalRows / (double) resultsPerPage));
-
-        if (resultsPage > totalPages) resultsPage = totalPages;
-        if (resultsPage < 1) resultsPage = 1;
-
-        int start = (resultsPage - 1) * resultsPerPage;
-        int end = Math.min(start + resultsPerPage, totalRows);
-
-        for (int i = start; i < end; i++) {
-            StudentZipSubmission s = currentProject.getSubmissions().get(i);
-            Status status = s.getResult() == null ? null : s.getResult().getStatus();
-
-            model.addRow(new Object[]{
-                    s.getStudentId(),
-                    getCompileStatus(status),
-                    getRunStatus(status),
-                    getOutputStatus(status),
-                    getFinalStatus(status),
-                    "Student Details  ›"
-            });
-        }
-
         JTable table = new JTable(model);
         table.setRowHeight(68);
         table.setFont(FONT_BODY);
@@ -1956,20 +1935,6 @@ public class IAEGui extends JFrame {
         table.getTableHeader().setPreferredSize(new Dimension(0, 52));
         table.getTableHeader().setBorder(new MatteBorder(1, 0, 1, 0, BORDER_COLOR));
 
-        table.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                int row = table.rowAtPoint(e.getPoint());
-                int col = table.columnAtPoint(e.getPoint());
-
-                if (row >= 0 && col == 5) {
-                    int realIndex = start + row;
-                    StudentZipSubmission submission = currentProject.getSubmissions().get(realIndex);
-                    openStudentDetails(submission);
-                }
-            }
-        });
-
         JPanel tableHolder = new JPanel(new BorderLayout());
         tableHolder.setBackground(Color.WHITE);
         tableHolder.add(table.getTableHeader(), BorderLayout.NORTH);
@@ -1979,9 +1944,7 @@ public class IAEGui extends JFrame {
         footer.setBackground(BG_CARD);
         footer.setBorder(new EmptyBorder(14, 22, 14, 22));
 
-        JLabel showing = new JLabel(
-                "Showing " + (totalRows == 0 ? 0 : start + 1) + " to " + end + " of " + totalRows + " results"
-        );
+        JLabel showing = new JLabel();
         showing.setFont(FONT_BODY);
         showing.setForeground(TEXT_SECONDARY);
 
@@ -1996,23 +1959,6 @@ public class IAEGui extends JFrame {
         page.setPreferredSize(new Dimension(44, 36));
         next.setPreferredSize(new Dimension(44, 36));
 
-        prev.setEnabled(resultsPage > 1);
-        next.setEnabled(resultsPage < totalPages);
-
-        prev.addActionListener(e -> {
-            if (resultsPage > 1) {
-                resultsPage--;
-                openEvaluationResults(currentProject);
-            }
-        });
-
-        next.addActionListener(e -> {
-            if (resultsPage < totalPages) {
-                resultsPage++;
-                openEvaluationResults(currentProject);
-            }
-        });
-
         pagination.add(prev);
         pagination.add(page);
         pagination.add(next);
@@ -2024,13 +1970,126 @@ public class IAEGui extends JFrame {
         footer.add(pagination, BorderLayout.CENTER);
         footer.add(perPage, BorderLayout.EAST);
 
+        List<StudentZipSubmission> displayedSubmissions = new ArrayList<>();
+
+        final Runnable[] refreshResultsTable = new Runnable[1];
+
+        refreshResultsTable[0] = () -> {
+            String query = getRealText(search, "Search by ID or name...").toLowerCase().trim();
+
+            List<StudentZipSubmission> filteredSubmissions = new ArrayList<>();
+
+            for (StudentZipSubmission s : currentProject.getSubmissions()) {
+                Status status = s.getResult() == null ? null : s.getResult().getStatus();
+
+                String searchableText = (
+                        s.getStudentId() + " " +
+                                getCompileStatus(status) + " " +
+                                getRunStatus(status) + " " +
+                                getOutputStatus(status) + " " +
+                                getFinalStatus(status)
+                ).toLowerCase();
+
+                if (query.isEmpty() || searchableText.contains(query)) {
+                    filteredSubmissions.add(s);
+                }
+            }
+
+            int totalRows = filteredSubmissions.size();
+            int totalPages = Math.max(1, (int) Math.ceil(totalRows / (double) resultsPerPage));
+
+            if (resultsPage > totalPages) resultsPage = totalPages;
+            if (resultsPage < 1) resultsPage = 1;
+
+            int start = (resultsPage - 1) * resultsPerPage;
+            int end = Math.min(start + resultsPerPage, totalRows);
+
+            model.setRowCount(0);
+            displayedSubmissions.clear();
+
+            for (int i = start; i < end; i++) {
+                StudentZipSubmission s = filteredSubmissions.get(i);
+                Status status = s.getResult() == null ? null : s.getResult().getStatus();
+
+                displayedSubmissions.add(s);
+
+                model.addRow(new Object[]{
+                        s.getStudentId(),
+                        getCompileStatus(status),
+                        getRunStatus(status),
+                        getOutputStatus(status),
+                        getFinalStatus(status),
+                        "Student Details  ›"
+                });
+            }
+
+            if (totalRows == 0) {
+                showing.setText("Showing 0 results");
+            } else {
+                showing.setText("Showing " + (start + 1) + " to " + end + " of " + totalRows + " results");
+            }
+
+            page.setText(String.valueOf(resultsPage));
+            prev.setEnabled(resultsPage > 1);
+            next.setEnabled(resultsPage < totalPages);
+            perPage.setText(resultsPerPage + " per page  ⌄");
+        };
+
+        search.getDocument().addDocumentListener(new DocumentListener() {
+            private void updateSearch() {
+                resultsPage = 1;
+                refreshResultsTable[0].run();
+            }
+
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                updateSearch();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                updateSearch();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                updateSearch();
+            }
+        });
+
+        prev.addActionListener(e -> {
+            if (resultsPage > 1) {
+                resultsPage--;
+                refreshResultsTable[0].run();
+            }
+        });
+
+        next.addActionListener(e -> {
+            resultsPage++;
+            refreshResultsTable[0].run();
+        });
+
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                int row = table.rowAtPoint(e.getPoint());
+                int col = table.columnAtPoint(e.getPoint());
+
+                if (row >= 0 && col == 5 && row < displayedSubmissions.size()) {
+                    StudentZipSubmission submission = displayedSubmissions.get(row);
+                    openStudentDetails(submission);
+                }
+            }
+        });
+
+        refreshResultsTable[0].run();
+
         tableCard.add(tableHeader, BorderLayout.NORTH);
         tableCard.add(tableHolder, BorderLayout.CENTER);
         tableCard.add(footer, BorderLayout.SOUTH);
 
         return tableCard;
     }
-
     private JPanel createSideStatCard(String title, String value, String iconType, Color accent, Color softBg) {
         JPanel card = new JPanel(new BorderLayout(18, 0));
         card.setBackground(BG_CARD);
