@@ -23,9 +23,23 @@ public class ConfigStore {
 
     public List<Configuration> getDefaultConfigs() {
         List<Configuration> defaults = new ArrayList<>();
-        defaults.add(new Configuration("Java Default", "JAVA", "javac *.java", "java $MAIN", ".java", "public\\s+static\\s+void\\s+main"));
+        defaults.add(new Configuration(
+                "Java Default",
+                "JAVA",
+                "javac -d . $(find . -name \"*.java\")",
+                "java $MAIN",
+                ".java",
+                "public\\s+static\\s+void\\s+main"
+        ));
         defaults.add(new Configuration("Python Default", "PYTHON", "echo skip", "python3 $MAIN", ".py", "if\\s+__name__\\s*==\\s*[\"']__main__[\"']"));
-        defaults.add(new Configuration("C Default", "C", "gcc *.c -o main", "./main", ".c", "int\\s+main\\s*\\("));
+        defaults.add(new Configuration(
+                "C Default",
+                "C",
+                "gcc *.c -o main",
+                "./main",
+                ".c",
+                "int\\s+main\\s*\\("
+        ));
         defaults.add(new Configuration("Haskell Default", "HASKELL", "ghc --make $MAIN -o main", "./main", ".hs", "\\bmain\\s*[:=]"));
         return defaults;
     }

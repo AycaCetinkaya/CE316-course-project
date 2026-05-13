@@ -37,6 +37,15 @@ public class ProjectRunnerService {
 
                 Configuration config = getConfig(actualLanguage, submission.getExtractedFolder());
 
+                if (config == null) {
+                    submission.setResult(new Result(
+                            Status.RUNTIME_ERROR,
+                            "",
+                            "Unsupported language or no configuration found."
+                    ));
+                    continue;
+                }
+
                 String mainFile = findMainFileName(actualLanguage, submission.getExtractedFolder(), config);
 
                 if (mainFile == null) {
@@ -53,14 +62,6 @@ public class ProjectRunnerService {
                         config.getEntryPointPattern()
                 );
 
-                if (config == null) {
-                    submission.setResult(new Result(
-                            Status.RUNTIME_ERROR,
-                            "",
-                            "Unsupported language or no source file found."
-                    ));
-                    continue;
-                }
 
                 if (projectId == -1) {
                     try {
@@ -151,7 +152,8 @@ public class ProjectRunnerService {
             if (file.getName().endsWith(".java")) {
                 try {
                     String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
-                    if (content.contains("public static void main")) {
+                    if (content.contains("public static void main") ||
+                            content.matches("(?s).*public\\s+static\\s+void\\s+main\\s*\\(.*")) {
                         return file.getName().replace(".java", "");
                     }
                 } catch (Exception ignored) { }

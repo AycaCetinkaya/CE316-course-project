@@ -61,6 +61,10 @@ public class Evaluator {
             return base;
         }
 
+        if (base.contains("$INPUT")) {
+            return base.replace("$INPUT", input);
+        }
+
         return base + " " + input;
     }
 

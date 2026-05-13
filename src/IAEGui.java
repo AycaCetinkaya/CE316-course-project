@@ -799,20 +799,25 @@ public class IAEGui extends JFrame {
     }
 
     private Language mapLanguage(String selected) {
-        switch (selected) {
-            case "AUTO":
-                return Language.AUTO;
-            case "C Language":
-                return Language.C;
-            case "Java":
-                return Language.JAVA;
-            case "Python 3":
-                return Language.PYTHON;
-            case "Haskell":
-                return Language.HASKELL;
-            default:
-                return Language.AUTO;
+        if (selected == null) {
+            return Language.AUTO;
         }
+
+        if (selected.equals("AUTO")) {
+            return Language.AUTO;
+        }
+
+        for (Configuration config : allConfigs) {
+            if (config.getName().equals(selected)) {
+                try {
+                    return Language.valueOf(config.getLanguage().toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    return Language.AUTO;
+                }
+            }
+        }
+
+        return Language.AUTO;
     }
 
     private void refreshDashboard() {
