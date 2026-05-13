@@ -1166,7 +1166,103 @@ public class IAEGui extends JFrame {
     }
 
     private JPanel createHelpPanel() {
-        return createPageBase("Help & Documentation", "Complete guide to using the Integrated Assignment Environment");
+        JPanel panel = createPageBase("Help & Documentation", "Complete guide to using the Integrated Assignment Environment");
+
+        JPanel contentPanel = new JPanel(new GridBagLayout());
+        contentPanel.setBackground(BG_CANVAS);
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.NORTH;
+        gbc.insets = new Insets(0, 0, 0, 0);
+
+        contentPanel.add(createHelpTopicBox("Getting Started", new String[][]{
+                {"What is IAE?", "The Integrated Assignment Environment (IAE) is a desktop application designed for lecturers to automatically evaluate programming assignments submitted by students. It compiles student code, runs it with test inputs, and compares outputs against expected results."},
+                {"System Requirements", "IAE requires Windows 10 or later. You must have the necessary compilers/interpreters installed for the programming languages you want to evaluate (e.g., GCC for C, Python 3 for Python)."}
+        }), gbc);
+        gbc.gridy++;
+
+        contentPanel.add(createHelpTopicBox("How to Create a Project", new String[][]{
+                {"Step 1: Navigate to Create Project", "Click the 'Create New Project' button on the Dashboard or use the sidebar navigation."},
+                {"Step 2: Fill in Project Details", "Enter a descriptive project name (e.g., 'Data Structures - Assignment 1') and select an appropriate language configuration from the dropdown menu."},
+                {"Step 3: Select Files", "Choose your input file (test data), expected output file (correct results), and the folder containing student ZIP submissions."},
+                {"Step 4: Save and Run", "Click 'Save Project' to store the configuration, or 'Run Project' to immediately start the evaluation process."}
+        }), gbc);
+        gbc.gridy++;
+
+        contentPanel.add(createHelpTopicBox("How to Define Configurations", new String[][]{
+                {"What are Configurations?", "Configurations define how to compile and run programs for different programming languages. Each configuration specifies compiler paths, compile commands, and run commands."},
+                {"Command Placeholders", "Use these placeholders in your commands: {source} for source file path, {output} for executable name, {classname} for Java class names."},
+                {"Import/Export", "Save time by exporting existing configurations and importing them on other machines or sharing them with colleagues."}
+        }), gbc);
+        gbc.gridy++;
+
+        gbc.weighty = 1.0;
+        contentPanel.add(Box.createVerticalGlue(), gbc);
+
+        JScrollPane scrollPane = new JScrollPane(contentPanel);
+        scrollPane.setBorder(null);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        scrollPane.getViewport().setBackground(BG_CANVAS);
+
+        panel.add(scrollPane, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel createHelpTopicBox(String mainTitle, String[][] sections) {
+        JPanel container = new JPanel();
+        container.setLayout(new BorderLayout());
+        container.setBackground(BG_CANVAS);
+        container.setBorder(new EmptyBorder(0, 0, 30, 0));
+        container.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel titleBox = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 12));
+        titleBox.setBackground(new Color(226, 232, 240));
+        titleBox.setBorder(new MatteBorder(1, 1, 0, 1, BORDER_COLOR));
+
+        JLabel lblTitle = new JLabel(mainTitle);
+        lblTitle.setFont(new Font("SansSerif", Font.BOLD, 20)); // Slightly larger for full-screen
+        lblTitle.setForeground(TEXT_PRIMARY);
+        titleBox.add(lblTitle);
+
+        JPanel contentBox = new JPanel();
+        contentBox.setLayout(new BoxLayout(contentBox, BoxLayout.Y_AXIS));
+        contentBox.setBackground(BG_CARD);
+        contentBox.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(BORDER_COLOR, 1),
+                new EmptyBorder(25, 25, 10, 25)
+        ));
+
+        for (String[] section : sections) {
+            JLabel subtitle = new JLabel(section[0]);
+            subtitle.setFont(FONT_SUBHEADER);
+            subtitle.setForeground(TEXT_PRIMARY);
+            subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+            JTextArea content = new JTextArea(section[1]);
+            content.setFont(FONT_BODY);
+            content.setForeground(TEXT_SECONDARY);
+            content.setLineWrap(true);
+            content.setWrapStyleWord(true);
+            content.setEditable(false);
+            content.setFocusable(false);
+            content.setBackground(BG_CARD);
+            content.setBorder(new EmptyBorder(8, 0, 20, 0));
+            content.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+            contentBox.add(subtitle);
+            contentBox.add(content);
+        }
+
+        container.add(titleBox, BorderLayout.NORTH);
+        container.add(contentBox, BorderLayout.CENTER);
+
+        container.setMaximumSize(new Dimension(1600, container.getPreferredSize().height));
+
+        return container;
     }
 
     private JPanel createCardPanel() {
