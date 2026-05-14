@@ -16,21 +16,26 @@ public class EvaluationService {
         List<TestCase> testCases = project.getTestCases();
 
         for (StudentZipSubmission submission : project.getSubmissions()) {
-
-            System.out.println("\nEvaluating: " + submission.getStudentId());
-
-            if (submission.getResult() != null &&
-                    submission.getResult().getStatus() == Status.EXTRACTION_ERROR) {
-
-                System.out.println("  Skipped due to extraction error.");
-                continue;
-            }
-
-            Result finalResult = evaluateSubmission(submission, config, testCases);
-            submission.setResult(finalResult);
-
-            System.out.println("  Final Status: " + finalResult.getStatus());
+            evaluate(submission, config, testCases);
         }
+    }
+
+    public void evaluate(StudentZipSubmission submission,
+                         Configuration config,
+                         List<TestCase> testCases) {
+
+        System.out.println("\nEvaluating: " + submission.getStudentId());
+
+        if (submission.getResult() != null &&
+                submission.getResult().getStatus() == Status.EXTRACTION_ERROR) {
+            System.out.println("  Skipped due to extraction error.");
+            return;
+        }
+
+        Result finalResult = evaluateSubmission(submission, config, testCases);
+        submission.setResult(finalResult);
+
+        System.out.println("  Final Status: " + finalResult.getStatus());
     }
 
     private Result evaluateSubmission(StudentZipSubmission submission,

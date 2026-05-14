@@ -26,8 +26,8 @@ public class ConfigStore {
         defaults.add(new Configuration(
                 "Java Default",
                 "JAVA",
-                "javac -d . $(find . -name \"*.java\")",
-                "java $MAIN",
+                "javac -d . *.java",
+                "java -cp . $MAIN",
                 ".java",
                 "public\\s+static\\s+void\\s+main"
         ));
@@ -41,6 +41,7 @@ public class ConfigStore {
                 "int\\s+main\\s*\\("
         ));
         defaults.add(new Configuration("Haskell Default", "HASKELL", "ghc --make $MAIN -o main", "./main", ".hs", "\\bmain\\s*[:=]"));
+        defaults.add(new Configuration("C++ Default", "CPP", "g++ *.cpp -o main", "./main", ".cpp", "int\\s+main\\s*\\("));
         return defaults;
     }
 
@@ -127,15 +128,25 @@ public class ConfigStore {
     }
 
     private static File resolveDefaultFile() {
-        File projectLocal = new File(DEFAULT_FILE_NAME);
+        File projectLocal = new File(DEFAULT_FILE_NAME).getAbsoluteFile();
         if (projectLocal.exists()) {
             return projectLocal;
         }
 
+        String userDir = System.getProperty("user.dir");
+        if (userDir != null && !userDir.isEmpty()) {
+            File cwdFile = Paths.get(userDir, DEFAULT_FILE_NAME).toFile();
+            if (cwdFile.exists()) {
+                return cwdFile;
+            }
+        }
+
         String userHome = System.getProperty("user.home");
         if (userHome != null && !userHome.isEmpty()) {
-            Path iaeDir = Paths.get(userHome, ".iae");
-            return iaeDir.resolve(DEFAULT_FILE_NAME).toFile();
+            File homeFile = Paths.get(userHome, ".iae", DEFAULT_FILE_NAME).toFile();
+            if (homeFile.exists()) {
+                return homeFile;
+            }
         }
 
         return projectLocal;

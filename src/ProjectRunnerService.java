@@ -41,16 +41,9 @@ public class ProjectRunnerService {
                     continue;
                 }
 
-                Configuration config;
-                Language actualLanguage = null;
-                boolean customConfigSelected = selectedConfig != null;
-
-                if (customConfigSelected) {
-                    config = selectedConfig;
-                } else {
-                    actualLanguage = detectLanguage(submission.getExtractedFolder());
-                    config = getConfig(actualLanguage, submission.getExtractedFolder());
-                }
+                Configuration config = selectedConfig != null
+                        ? selectedConfig
+                        : autoDetectConfig(submission.getExtractedFolder());
 
                 if (config == null) {
                     submission.setResult(new Result(
@@ -61,9 +54,7 @@ public class ProjectRunnerService {
                     continue;
                 }
 
-                String mainFile = customConfigSelected
-                        ? findMainFileNameByConfig(submission.getExtractedFolder(), config)
-                        : findMainFileName(actualLanguage, submission.getExtractedFolder(), config);
+                String mainFile = findMainFileNameByConfig(submission.getExtractedFolder(), config);
 
                 if (mainFile == null) {
                     submission.setResult(new Result(Status.RUNTIME_ERROR, "", "Main file not found."));
@@ -80,11 +71,7 @@ public class ProjectRunnerService {
                 );
 
 
-                List<StudentZipSubmission> single = new ArrayList<>();
-                single.add(submission);
-
-                Project singleProject = new Project(projectName, studentConfig, single, testCases);
-                evaluationService.evaluateProject(singleProject);
+                evaluationService.evaluate(submission, studentConfig, testCases);
 
                 try {
                     db.upsertSubmission(projectId, submission);
@@ -106,30 +93,36 @@ public class ProjectRunnerService {
         return resultProject;
     }
 
-    private Language detectLanguage(File folder) {
-        if (folder == null || !folder.exists()) return Language.UNKNOWN;
+    private Configuration autoDetectConfig(File folder) {
+        if (folder == null || !folder.exists()) return null;
 
-        for (File file : getAllFiles(folder)) {
-            String name = file.getName().toLowerCase();
-
-            if (name.endsWith(".c")) return Language.C;
-            if (name.endsWith(".java")) return Language.JAVA;
-            if (name.endsWith(".py")) return Language.PYTHON;
-            if (name.endsWith(".hs") || name.endsWith(".lhs")) return Language.HASKELL;
-        }
-
-        return Language.UNKNOWN;
-    }
-
-    private Configuration getConfig(Language lang, File folder) {
         ConfigStore store = new ConfigStore();
         List<Configuration> configs = store.loadAll();
+        List<File> files = getAllFiles(folder);
 
         for (Configuration config : configs) {
-            if (config.getLanguage().equalsIgnoreCase(lang.name())) {
-                return config;
+            String ext = config.getSourceExtension();
+            String pattern = config.getEntryPointPattern();
+            if (ext == null || ext.isEmpty()) continue;
+
+            for (File f : files) {
+                if (!f.getName().toLowerCase().endsWith(ext.toLowerCase())) continue;
+                if (pattern == null || pattern.isEmpty()) return config;
+                try {
+                    String content = new String(java.nio.file.Files.readAllBytes(f.toPath()));
+                    if (content.matches("(?s).*" + pattern + ".*")) return config;
+                } catch (Exception ignored) { }
             }
         }
+
+        for (Configuration config : configs) {
+            String ext = config.getSourceExtension();
+            if (ext == null || ext.isEmpty()) continue;
+            for (File f : files) {
+                if (f.getName().toLowerCase().endsWith(ext.toLowerCase())) return config;
+            }
+        }
+
         return null;
     }
 
@@ -150,82 +143,17 @@ public class ProjectRunnerService {
         return files;
     }
 
-    private String findMainClass(File folder) {
-        for (File file : getAllFiles(folder)) {
-            if (file.getName().endsWith(".java")) {
-                try {
-                    String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
-                    if (content.contains("public static void main") ||
-                            content.matches("(?s).*public\\s+static\\s+void\\s+main\\s*\\(.*")) {
-                        return file.getName().replace(".java", "");
-                    }
-                } catch (Exception ignored) { }
-            }
+    private String javaFullyQualifiedName(File file, String content) {
+        String className = file.getName().replace(".java", "");
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(?m)^\\s*package\\s+([a-zA-Z_][\\w.]*)\\s*;")
+                .matcher(content);
+        if (m.find()) {
+            return m.group(1) + "." + className;
         }
-        return null;
+        return className;
     }
 
-    private String findMainPythonFile(File folder) {
-        File fallback = null;
-        for (File file : getAllFiles(folder)) {
-            String name = file.getName();
-            if (!name.endsWith(".py")) continue;
-            try {
-                String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
-                if (content.contains("if __name__ == \"__main__\"") ||
-                        content.contains("if __name__ == '__main__'")) {
-                    return relativePath(folder, file);
-                }
-                if (name.equals("main.py")) fallback = file;
-            } catch (Exception ignored) { }
-        }
-        if (fallback != null) return relativePath(folder, fallback);
-        for (File file : getAllFiles(folder)) {
-            if (file.getName().endsWith(".py")) return relativePath(folder, file);
-        }
-        return null;
-    }
-
-    private String findMainHaskellFile(File folder) {
-        File fallback = null;
-        for (File file : getAllFiles(folder)) {
-            String name = file.getName();
-            if (!name.endsWith(".hs") && !name.endsWith(".lhs")) continue;
-            try {
-                String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
-                if (content.matches("(?s).*\\bmain\\s*[:=].*")) {
-                    return relativePath(folder, file);
-                }
-                if (name.equalsIgnoreCase("Main.hs") || name.equalsIgnoreCase("main.hs")) {
-                    fallback = file;
-                }
-            } catch (Exception ignored) { }
-        }
-        if (fallback != null) return relativePath(folder, fallback);
-        for (File file : getAllFiles(folder)) {
-            String name = file.getName();
-            if (name.endsWith(".hs") || name.endsWith(".lhs")) return relativePath(folder, file);
-        }
-        return null;
-    }
-
-    private String findMainFileName(Language lang, File folder, Configuration config) {
-        if (lang == Language.JAVA) return findMainClass(folder);
-        if (lang == Language.PYTHON) return findMainPythonFile(folder);
-        if (lang == Language.HASKELL) return findMainHaskellFile(folder);
-        if (lang == Language.C) {
-            for (File f : getAllFiles(folder)) if (f.getName().endsWith(".c")) return relativePath(folder, f);
-        }
-        String ext = config.getSourceExtension();
-        if (ext != null && !ext.isEmpty()) {
-            for (File f : getAllFiles(folder)) {
-                if (f.getName().endsWith(ext)) {
-                    return relativePath(folder, f);
-                }
-            }
-        }
-        return null;
-    }
     private String findMainFileNameByConfig(File folder, Configuration config) {
         String extension = config.getSourceExtension();
         String pattern = config.getEntryPointPattern();
@@ -263,11 +191,14 @@ public class ProjectRunnerService {
 
     private String mainToken(File folder, File file, Configuration config) {
         String language = config.getLanguage() == null ? "" : config.getLanguage();
-        String extension = config.getSourceExtension() == null ? "" : config.getSourceExtension();
 
         if (language.equalsIgnoreCase("JAVA")) {
-            String fileName = file.getName();
-            return extension.isEmpty() ? fileName : fileName.replace(extension, "");
+            try {
+                String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
+                return javaFullyQualifiedName(file, content);
+            } catch (Exception e) {
+                return file.getName().replace(".java", "");
+            }
         }
 
         return relativePath(folder, file);

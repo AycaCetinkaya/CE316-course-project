@@ -471,7 +471,12 @@ public class DatabaseManager {
                 }
 
                 String statusStr = rs.getString("status");
-                Status status = Status.valueOf(statusStr);
+                Status status;
+                try {
+                    status = Status.valueOf(statusStr);
+                } catch (IllegalArgumentException | NullPointerException e) {
+                    status = Status.RUNTIME_ERROR;
+                }
 
                 String output = rs.getString("output");
                 String errorMessage = rs.getString("error_message");

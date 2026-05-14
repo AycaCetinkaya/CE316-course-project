@@ -10,11 +10,12 @@ public class CommandExecutor {
 
         try {
             ProcessBuilder processBuilder;
+            String platformCommand = platformizeCommand(command);
 
             if (isWindows()) {
-                processBuilder = new ProcessBuilder("cmd.exe", "/c", command);
+                processBuilder = new ProcessBuilder("cmd.exe", "/c", platformCommand);
             } else {
-                processBuilder = new ProcessBuilder("bash", "-c", command);
+                processBuilder = new ProcessBuilder("bash", "-c", platformCommand);
             }
 
             processBuilder.directory(workingDirectory);
@@ -50,5 +51,14 @@ public class CommandExecutor {
 
     private boolean isWindows() {
         return System.getProperty("os.name").toLowerCase().contains("win");
+    }
+
+    private String platformizeCommand(String command) {
+        if (command == null) return command;
+        if (isWindows()) {
+            command = command.replaceAll("(?<![A-Za-z0-9_])\\./([A-Za-z0-9_.-]+)", "$1.exe");
+            command = command.replaceAll("\\bpython3\\b", "python");
+        }
+        return command;
     }
 }
