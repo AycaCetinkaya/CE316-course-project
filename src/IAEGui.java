@@ -448,9 +448,18 @@ public class IAEGui extends JFrame {
                 "Completed"
         );
 
+        JButton deleteButton = createProjectDeleteButton(project);
+        JPanel rightBox = (JPanel) row.getClientProperty("rightBox");
+        if (rightBox != null) {
+            rightBox.add(deleteButton);
+        }
+
         row.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                if (SwingUtilities.isDescendingFrom(e.getComponent(), deleteButton)) {
+                    return;
+                }
                 openEvaluationResults(project);
             }
         });
@@ -504,6 +513,7 @@ public class IAEGui extends JFrame {
         badge.setForeground(new Color(22, 163, 74));
 
         rightBox.add(badge);
+        row.putClientProperty("rightBox", rightBox);
 
         MouseAdapter rowHover = new MouseAdapter() {
             public void mouseEntered(MouseEvent e) {
@@ -539,6 +549,59 @@ public class IAEGui extends JFrame {
         row.add(rightBox, BorderLayout.EAST);
 
         return row;
+    }
+
+    private JButton createProjectDeleteButton(Project project) {
+        JButton button = new JButton("Delete");
+        button.setFont(new Font("SansSerif", Font.BOLD, 11));
+        button.setForeground(new Color(220, 38, 38));
+        button.setBackground(new Color(254, 242, 242));
+        button.setBorder(new LineBorder(new Color(252, 165, 165), 1, true));
+        button.setFocusPainted(false);
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        button.setPreferredSize(new Dimension(76, 30));
+
+        button.addActionListener(e -> {
+            int confirm = JOptionPane.showConfirmDialog(
+                    this,
+                    "Delete project: " + project.getName() + "?",
+                    "Confirm Delete",
+                    JOptionPane.YES_NO_OPTION
+            );
+
+            if (confirm != JOptionPane.YES_OPTION) {
+                return;
+            }
+
+            try {
+                DatabaseManager db = new DatabaseManager();
+                try {
+                    db.connect();
+                    db.initSchema();
+                    long projectId = project.getId() > 0
+                            ? project.getId()
+                            : db.findProjectIdByName(project.getName());
+
+                    if (projectId > 0) {
+                        db.deleteProject(projectId);
+                    }
+                } finally {
+                    db.disconnect();
+                }
+
+                recentProjects.remove(project);
+                if (currentProject == project) {
+                    currentProject = null;
+                }
+                refreshSavedProjects();
+                refreshDashboard();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this, "Delete failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        return button;
     }
 
     private JPanel createCreateProjectPanel() {
@@ -616,7 +679,7 @@ public class IAEGui extends JFrame {
         JButton btnRun = createOrangeButton("▷  Run Project");
 
         btnCancel.addActionListener(e -> clearCreateProjectForm());
-        btnSave.addActionListener(e -> JOptionPane.showMessageDialog(this, "Project saved successfully."));
+        btnSave.addActionListener(e -> saveProject());
         btnRun.addActionListener(e -> runProject());
 
         buttons.add(btnCancel);
@@ -637,11 +700,77 @@ public class IAEGui extends JFrame {
         String text = field.getText().trim();
         return text.equals(placeholder) ? "" : text;
     }
+
+    private void saveProject() {
+        try {
+            String projectName = getRealText(txtProjectName, "e.g., Data Structures - Assignment 1");
+            String selected = (String) cmbConfiguration.getSelectedItem();
+
+            if (projectName.isEmpty() || selected == null) {
+                JOptionPane.showMessageDialog(this, "Please fill project name and configuration.");
+                return;
+            }
+
+            Configuration selectedConfig = getSelectedConfiguration(selected);
+            Configuration projectConfig = selectedConfig != null
+                    ? selectedConfig
+                    : new Configuration("AUTO", "AUTO", "", "", "", "");
+
+            DatabaseManager db = new DatabaseManager();
+            try {
+                db.connect();
+                db.initSchema();
+                db.saveProject(projectName, projectConfig, buildTestCasesFromForm());
+            } finally {
+                db.disconnect();
+            }
+
+            refreshSavedProjects();
+            JOptionPane.showMessageDialog(this, "Project saved successfully.");
+            refreshDashboard();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Save failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private List<TestCase> buildTestCasesFromForm() throws java.io.IOException {
+        String inputPath = getRealText(txtInputFile, "Select input file...");
+        String expectedPath = getRealText(txtExpectedOutputFile, "Select expected output file...");
+
+        List<TestCase> testCases = new ArrayList<>();
+
+        if (!expectedPath.isEmpty()) {
+            String input = inputPath.isEmpty()
+                    ? ""
+                    : java.nio.file.Files.readString(java.nio.file.Paths.get(inputPath)).trim();
+
+            String expected = java.nio.file.Files.readString(java.nio.file.Paths.get(expectedPath)).trim();
+            testCases.add(new TestCase(input, expected));
+        } else {
+            testCases.add(new TestCase("3 1 2", "1 2 3"));
+            testCases.add(new TestCase("9 4 7", "4 7 9"));
+            testCases.add(new TestCase("10 2 5", "2 5 10"));
+        }
+
+        return testCases;
+    }
+
+    private void refreshSavedProjects() throws java.sql.SQLException {
+        DatabaseManager db = new DatabaseManager();
+        try {
+            db.connect();
+            db.initSchema();
+            recentProjects.clear();
+            recentProjects.addAll(db.getProjects());
+        } finally {
+            db.disconnect();
+        }
+    }
+
     private void runProject() {
         try {
             String projectName = getRealText(txtProjectName, "e.g., Data Structures - Assignment 1");
-            String inputPath = getRealText(txtInputFile, "Select input file...");
-            String expectedPath = getRealText(txtExpectedOutputFile, "Select expected output file...");
             String submissionsPath = getRealText(txtSubmissionsFolder, "Select folder containing ZIP files...");
 
             String selected = (String) cmbConfiguration.getSelectedItem();
@@ -652,21 +781,7 @@ public class IAEGui extends JFrame {
             }
 
             Configuration selectedConfig = getSelectedConfiguration(selected);
-
-            List<TestCase> testCases = new ArrayList<>();
-
-            if (!expectedPath.isEmpty()) {
-                String input = inputPath.isEmpty()
-                        ? ""
-                        : java.nio.file.Files.readString(java.nio.file.Paths.get(inputPath)).trim();
-
-                String expected = java.nio.file.Files.readString(java.nio.file.Paths.get(expectedPath)).trim();
-                testCases.add(new TestCase(input, expected));
-            } else {
-                testCases.add(new TestCase("3 1 2", "1 2 3"));
-                testCases.add(new TestCase("9 4 7", "4 7 9"));
-                testCases.add(new TestCase("10 2 5", "2 5 10"));
-            }
+            List<TestCase> testCases = buildTestCasesFromForm();
 
             ProjectRunnerService runner = new ProjectRunnerService();
 
@@ -677,7 +792,8 @@ public class IAEGui extends JFrame {
                     selectedConfig
             );
 
-            recentProjects.add(project);
+            refreshSavedProjects();
+            currentProject = project;
 
             JOptionPane.showMessageDialog(this, "Project evaluated successfully.");
             refreshDashboard();

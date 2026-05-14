@@ -146,6 +146,7 @@ public class ZipService {
         Files.delete(path);
     }
     private String removeOuterStudentFolder(String entryName, String studentId) {
+        entryName = entryName.replace('\\', '/');
         String prefix = studentId + "/";
 
         if (entryName.startsWith(prefix)) {

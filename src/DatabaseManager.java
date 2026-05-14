@@ -6,12 +6,21 @@ import java.io.File;
 public class DatabaseManager {
 
     private static final String DB_URL = "jdbc:sqlite:iae.db";
+    private final String dbUrl;
     private Connection connection;
+
+    public DatabaseManager() {
+        this(DB_URL);
+    }
+
+    public DatabaseManager(String dbUrl) {
+        this.dbUrl = dbUrl;
+    }
 
     //Connection
 
     public void connect() throws SQLException {
-        connection = DriverManager.getConnection(DB_URL);
+        connection = DriverManager.getConnection(dbUrl);
         // Enable foreign key support (off by default in SQLite)
         try (Statement stmt = connection.createStatement()) {
             stmt.execute("PRAGMA foreign_keys = ON");
@@ -36,8 +45,11 @@ public class DatabaseManager {
             CREATE TABLE IF NOT EXISTS Configurations (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 name            TEXT    NOT NULL UNIQUE,
+                language        TEXT    NOT NULL DEFAULT '',
                 compile_command TEXT    NOT NULL,
-                run_command     TEXT    NOT NULL
+                run_command     TEXT    NOT NULL,
+                source_extension TEXT   NOT NULL DEFAULT '',
+                entry_point_pattern TEXT NOT NULL DEFAULT ''
             )
             """,
                 """
@@ -89,16 +101,51 @@ public class DatabaseManager {
                 stmt.execute(sql);
             }
         }
+
+        migrateConfigurationColumns();
+    }
+
+    private void migrateConfigurationColumns() throws SQLException {
+        addColumnIfMissing("Configurations", "language", "TEXT NOT NULL DEFAULT ''");
+        addColumnIfMissing("Configurations", "source_extension", "TEXT NOT NULL DEFAULT ''");
+        addColumnIfMissing("Configurations", "entry_point_pattern", "TEXT NOT NULL DEFAULT ''");
+    }
+
+    private void addColumnIfMissing(String table, String column, String definition) throws SQLException {
+        if (columnExists(table, column)) return;
+
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+        }
+    }
+
+    private boolean columnExists(String table, String column) throws SQLException {
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) {
+                if (column.equalsIgnoreCase(rs.getString("name"))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     //Configuration
 
     public long insertConfiguration(Configuration config) throws SQLException {
-        String sql = "INSERT INTO Configurations (name, compile_command, run_command) VALUES (?, ?, ?)";
+        String sql = """
+                INSERT INTO Configurations
+                (name, language, compile_command, run_command, source_extension, entry_point_pattern)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """;
         try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, config.getName());
-            ps.setString(2, config.getCompileCommand());
-            ps.setString(3, config.getRunCommand());
+            ps.setString(2, config.getLanguage());
+            ps.setString(3, config.getCompileCommand());
+            ps.setString(4, config.getRunCommand());
+            ps.setString(5, config.getSourceExtension());
+            ps.setString(6, config.getEntryPointPattern());
             ps.executeUpdate();
             ResultSet keys = ps.getGeneratedKeys();
             return keys.next() ? keys.getLong(1) : -1;
@@ -106,33 +153,36 @@ public class DatabaseManager {
     }
 
     public long upsertConfiguration(Configuration config) throws SQLException {
-        String insertSql = "INSERT OR IGNORE INTO Configurations (name, compile_command, run_command) VALUES (?, ?, ?)";
-        try (PreparedStatement ps = connection.prepareStatement(insertSql)) {
-            ps.setString(1, config.getName());
-            ps.setString(2, config.getCompileCommand());
-            ps.setString(3, config.getRunCommand());
-            ps.executeUpdate();
-        }
-
         String selectSql = "SELECT id FROM Configurations WHERE name = ?";
         try (PreparedStatement ps = connection.prepareStatement(selectSql)) {
             ps.setString(1, config.getName());
             ResultSet rs = ps.executeQuery();
-            if (rs.next()) return rs.getLong("id");
+            if (rs.next()) {
+                long id = rs.getLong("id");
+                updateConfiguration(id, config);
+                return id;
+            }
         }
-        return -1;
+        return insertConfiguration(config);
     }
 
     public List<Configuration> getAllConfigurations() throws SQLException {
         List<Configuration> list = new ArrayList<>();
-        String sql = "SELECT name, compile_command, run_command FROM Configurations ORDER BY name";
+        String sql = """
+                SELECT name, language, compile_command, run_command, source_extension, entry_point_pattern
+                FROM Configurations
+                ORDER BY name
+                """;
         try (Statement stmt = connection.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 list.add(new Configuration(
                         rs.getString("name"),
+                        rs.getString("language"),
                         rs.getString("compile_command"),
-                        rs.getString("run_command")
+                        rs.getString("run_command"),
+                        rs.getString("source_extension"),
+                        rs.getString("entry_point_pattern")
                 ));
             }
         }
@@ -197,7 +247,7 @@ public class DatabaseManager {
 
     public List<TestCase> getTestCasesForProject(long projectId) throws SQLException {
         List<TestCase> list = new ArrayList<>();
-        String sql = "SELECT input, expected_output FROM TestCases WHERE project_id = ?";
+        String sql = "SELECT input, expected_output FROM TestCases WHERE project_id = ? ORDER BY id";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setLong(1, projectId);
             ResultSet rs = ps.executeQuery();
@@ -214,6 +264,22 @@ public class DatabaseManager {
             ps.setLong(1, projectId);
             ps.executeUpdate();
         }
+    }
+
+    public void replaceTestCasesForProject(long projectId, List<TestCase> testCases) throws SQLException {
+        deleteTestCasesForProject(projectId);
+        if (testCases == null) return;
+
+        for (TestCase testCase : testCases) {
+            insertTestCase(projectId, testCase);
+        }
+    }
+
+    public long saveProject(String name, Configuration config, List<TestCase> testCases) throws SQLException {
+        long configId = upsertConfiguration(config);
+        long projectId = upsertProject(name, configId);
+        replaceTestCasesForProject(projectId, testCases);
+        return projectId;
     }
 
     //Submits
@@ -310,6 +376,20 @@ public class DatabaseManager {
         return insertSubmission(projectId, submission, output, errorMessage);
     }
 
+    public void deleteSubmissionsForProject(long projectId) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(
+                "DELETE FROM DetailedResults WHERE submission_id IN (SELECT id FROM StudentSubmissions WHERE project_id = ?)")) {
+            ps.setLong(1, projectId);
+            ps.executeUpdate();
+        }
+
+        try (PreparedStatement ps = connection.prepareStatement(
+                "DELETE FROM StudentSubmissions WHERE project_id = ?")) {
+            ps.setLong(1, projectId);
+            ps.executeUpdate();
+        }
+    }
+
     //Detailed Results
 
     public void insertDetailedResult(long submissionId, long testCaseId,
@@ -331,9 +411,11 @@ public class DatabaseManager {
         List<Project> projects = new ArrayList<>();
 
         String sql = """
-        SELECT p.id, p.name, c.name AS config_name, c.compile_command, c.run_command
+        SELECT p.id, p.name, c.name AS config_name, c.language,
+               c.compile_command, c.run_command, c.source_extension, c.entry_point_pattern
         FROM Projects p
         JOIN Configurations c ON p.config_id = c.id
+        ORDER BY p.id
     """;
 
         try (Statement stmt = connection.createStatement();
@@ -344,8 +426,11 @@ public class DatabaseManager {
                 String projectName = rs.getString("name");
                 Configuration config = new Configuration(
                         rs.getString("config_name"),
+                        rs.getString("language"),
                         rs.getString("compile_command"),
-                        rs.getString("run_command")
+                        rs.getString("run_command"),
+                        rs.getString("source_extension"),
+                        rs.getString("entry_point_pattern")
                 );
 
                 List<TestCase> testCases = getTestCasesForProject(projectId);
@@ -401,12 +486,20 @@ public class DatabaseManager {
     }
 
     public void updateConfiguration(long id, Configuration config) throws SQLException {
-        String sql = "UPDATE Configurations SET name = ?, compile_command = ?, run_command = ? WHERE id = ?";
+        String sql = """
+                UPDATE Configurations
+                SET name = ?, language = ?, compile_command = ?, run_command = ?,
+                    source_extension = ?, entry_point_pattern = ?
+                WHERE id = ?
+                """;
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, config.getName());
-            ps.setString(2, config.getCompileCommand());
-            ps.setString(3, config.getRunCommand());
-            ps.setLong(4, id);
+            ps.setString(2, config.getLanguage());
+            ps.setString(3, config.getCompileCommand());
+            ps.setString(4, config.getRunCommand());
+            ps.setString(5, config.getSourceExtension());
+            ps.setString(6, config.getEntryPointPattern());
+            ps.setLong(7, id);
             ps.executeUpdate();
         }
     }

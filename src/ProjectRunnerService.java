@@ -9,11 +9,17 @@ public class ProjectRunnerService {
                               List<TestCase> testCases,
                               Configuration selectedConfig) throws ZipServiceException {
 
-        // --- Database Setup (Version A) ---
         DatabaseManager db = new DatabaseManager();
+        long projectId = -1;
+        Configuration projectConfig = selectedConfig != null
+                ? selectedConfig
+                : new Configuration("AUTO", "AUTO", "", "", "", "");
+
         try {
             db.connect();
             db.initSchema();
+            projectId = db.saveProject(projectName, projectConfig, testCases);
+            db.deleteSubmissionsForProject(projectId);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -22,12 +28,16 @@ public class ProjectRunnerService {
         List<StudentZipSubmission> submissions = zipService.extractAll(submissionsDir);
 
         EvaluationService evaluationService = new EvaluationService();
-        long projectId = -1;
 
         try {
             for (StudentZipSubmission submission : submissions) {
                 if (submission.getResult() != null &&
                         submission.getResult().getStatus() == Status.EXTRACTION_ERROR) {
+                    try {
+                        db.upsertSubmission(projectId, submission);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                     continue;
                 }
 
@@ -70,20 +80,6 @@ public class ProjectRunnerService {
                 );
 
 
-                if (projectId == -1) {
-                    try {
-                        long configId = db.upsertConfiguration(config);
-                        projectId = db.upsertProject(projectName, configId);
-
-                        db.deleteTestCasesForProject(projectId);
-                        for (TestCase tc : testCases) {
-                            db.insertTestCase(projectId, tc);
-                        }
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-
                 List<StudentZipSubmission> single = new ArrayList<>();
                 single.add(submission);
 
@@ -102,7 +98,7 @@ public class ProjectRunnerService {
 
         Project resultProject = new Project(
                 projectName,
-                selectedConfig != null ? selectedConfig : new Configuration("AUTO", "", ""),
+                projectConfig,
                 submissions,
                 testCases
         );
@@ -178,14 +174,14 @@ public class ProjectRunnerService {
                 String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
                 if (content.contains("if __name__ == \"__main__\"") ||
                         content.contains("if __name__ == '__main__'")) {
-                    return name;
+                    return relativePath(folder, file);
                 }
                 if (name.equals("main.py")) fallback = file;
             } catch (Exception ignored) { }
         }
-        if (fallback != null) return fallback.getName();
+        if (fallback != null) return relativePath(folder, fallback);
         for (File file : getAllFiles(folder)) {
-            if (file.getName().endsWith(".py")) return file.getName();
+            if (file.getName().endsWith(".py")) return relativePath(folder, file);
         }
         return null;
     }
@@ -198,17 +194,17 @@ public class ProjectRunnerService {
             try {
                 String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
                 if (content.matches("(?s).*\\bmain\\s*[:=].*")) {
-                    return name;
+                    return relativePath(folder, file);
                 }
                 if (name.equalsIgnoreCase("Main.hs") || name.equalsIgnoreCase("main.hs")) {
                     fallback = file;
                 }
             } catch (Exception ignored) { }
         }
-        if (fallback != null) return fallback.getName();
+        if (fallback != null) return relativePath(folder, fallback);
         for (File file : getAllFiles(folder)) {
             String name = file.getName();
-            if (name.endsWith(".hs") || name.endsWith(".lhs")) return name;
+            if (name.endsWith(".hs") || name.endsWith(".lhs")) return relativePath(folder, file);
         }
         return null;
     }
@@ -218,13 +214,13 @@ public class ProjectRunnerService {
         if (lang == Language.PYTHON) return findMainPythonFile(folder);
         if (lang == Language.HASKELL) return findMainHaskellFile(folder);
         if (lang == Language.C) {
-            for (File f : getAllFiles(folder)) if (f.getName().endsWith(".c")) return f.getName();
+            for (File f : getAllFiles(folder)) if (f.getName().endsWith(".c")) return relativePath(folder, f);
         }
         String ext = config.getSourceExtension();
         if (ext != null && !ext.isEmpty()) {
             for (File f : getAllFiles(folder)) {
                 if (f.getName().endsWith(ext)) {
-                    return f.getName();
+                    return relativePath(folder, f);
                 }
             }
         }
@@ -252,16 +248,37 @@ public class ProjectRunnerService {
 
                 if (pattern != null && !pattern.isEmpty()) {
                     if (content.matches("(?s).*" + pattern + ".*")) {
-                        return fileName.replace(extension, "");
+                        return mainToken(folder, file, config);
                     }
                 }
             } catch (Exception ignored) { }
         }
 
         if (fallback != null) {
-            return fallback.getName().replace(extension, "");
+            return mainToken(folder, fallback, config);
         }
 
         return null;
+    }
+
+    private String mainToken(File folder, File file, Configuration config) {
+        String language = config.getLanguage() == null ? "" : config.getLanguage();
+        String extension = config.getSourceExtension() == null ? "" : config.getSourceExtension();
+
+        if (language.equalsIgnoreCase("JAVA")) {
+            String fileName = file.getName();
+            return extension.isEmpty() ? fileName : fileName.replace(extension, "");
+        }
+
+        return relativePath(folder, file);
+    }
+
+    private String relativePath(File folder, File file) {
+        return folder.toPath()
+                .toAbsolutePath()
+                .normalize()
+                .relativize(file.toPath().toAbsolutePath().normalize())
+                .toString()
+                .replace(File.separatorChar, '/');
     }
 }
