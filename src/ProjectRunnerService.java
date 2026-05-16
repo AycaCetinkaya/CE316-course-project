@@ -33,11 +33,7 @@ public class ProjectRunnerService {
             for (StudentZipSubmission submission : submissions) {
                 if (submission.getResult() != null &&
                         submission.getResult().getStatus() == Status.EXTRACTION_ERROR) {
-                    try {
-                        db.upsertSubmission(projectId, submission);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
+                    persistSubmission(db, projectId, submission);
                     continue;
                 }
 
@@ -51,6 +47,7 @@ public class ProjectRunnerService {
                             "",
                             "Unsupported language or no configuration found."
                     ));
+                    persistSubmission(db, projectId, submission);
                     continue;
                 }
 
@@ -58,6 +55,7 @@ public class ProjectRunnerService {
 
                 if (mainFile == null) {
                     submission.setResult(new Result(Status.RUNTIME_ERROR, "", "Main file not found."));
+                    persistSubmission(db, projectId, submission);
                     continue;
                 }
 
@@ -73,11 +71,7 @@ public class ProjectRunnerService {
 
                 evaluationService.evaluate(submission, studentConfig, testCases);
 
-                try {
-                    db.upsertSubmission(projectId, submission);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+                persistSubmission(db, projectId, submission);
             }
         } finally {
             db.disconnect();
@@ -91,6 +85,17 @@ public class ProjectRunnerService {
         );
         resultProject.setId(projectId);
         return resultProject;
+    }
+
+    private void persistSubmission(DatabaseManager db, long projectId, StudentZipSubmission submission) {
+        try {
+            long submissionId = db.upsertSubmission(projectId, submission);
+            if (submissionId > 0) {
+                db.replaceDetailedResults(submissionId, submission.getPerTestResults());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private Configuration autoDetectConfig(File folder) {

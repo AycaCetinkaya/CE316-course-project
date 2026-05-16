@@ -19,6 +19,10 @@ test-submissions/*/
 # Keep Zip files
 !test-submissions/*.zip
 
+# Keep test-case input/expected files
+!test-submissions/test-cases/
+!test-submissions/test-cases/**
+
 # Database Files
 *.db
 *.sqlite

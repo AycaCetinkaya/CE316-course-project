@@ -1,3 +1,4 @@
+import java.util.ArrayList;
 import java.util.List;
 
 public class EvaluationService {
@@ -29,18 +30,22 @@ public class EvaluationService {
         if (submission.getResult() != null &&
                 submission.getResult().getStatus() == Status.EXTRACTION_ERROR) {
             System.out.println("  Skipped due to extraction error.");
+            submission.setPerTestResults(new ArrayList<>());
             return;
         }
 
-        Result finalResult = evaluateSubmission(submission, config, testCases);
+        List<PerTestResult> perTestResults = new ArrayList<>();
+        Result finalResult = evaluateSubmission(submission, config, testCases, perTestResults);
         submission.setResult(finalResult);
+        submission.setPerTestResults(perTestResults);
 
         System.out.println("  Final Status: " + finalResult.getStatus());
     }
 
     private Result evaluateSubmission(StudentZipSubmission submission,
                                       Configuration config,
-                                      List<TestCase> testCases) {
+                                      List<TestCase> testCases,
+                                      List<PerTestResult> perTestResults) {
 
         if (testCases == null || testCases.isEmpty()) {
             return new Result(
@@ -63,6 +68,15 @@ public class EvaluationService {
         }
 
         if (!compileResult.isSuccess()) {
+            for (TestCase testCase : testCases) {
+                perTestResults.add(new PerTestResult(
+                        testCase.getId(),
+                        Status.COMPILE_ERROR,
+                        compileResult.getOutput(),
+                        compileResult.getError(),
+                        compileResult.getExitCode()
+                ));
+            }
             return new Result(
                     Status.COMPILE_ERROR,
                     compileResult.getOutput(),
@@ -89,6 +103,14 @@ public class EvaluationService {
                         testCase.getExpectedOutput()
                 );
 
+                perTestResults.add(new PerTestResult(
+                        testCase.getId(),
+                        testResult.getStatus(),
+                        evalResult.getRunStdout(),
+                        evalResult.getRunStderr(),
+                        evalResult.getRunExitCode()
+                ));
+
                 allOutputs.append("Test Case ")
                         .append(i + 1)
                         .append(" -> ")
@@ -108,6 +130,13 @@ public class EvaluationService {
                 }
 
             } catch (EvaluatorException e) {
+                perTestResults.add(new PerTestResult(
+                        testCase.getId(),
+                        Status.RUNTIME_ERROR,
+                        "",
+                        e.getMessage(),
+                        -1
+                ));
                 return new Result(
                         Status.RUNTIME_ERROR,
                         allOutputs.toString(),

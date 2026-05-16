@@ -87,6 +87,7 @@ public class DatabaseManager {
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 submission_id INTEGER NOT NULL,
                 test_case_id  INTEGER NOT NULL,
+                status        TEXT    NOT NULL DEFAULT 'PENDING',
                 actual_output TEXT,
                 error_message TEXT,
                 exit_code     INTEGER,
@@ -103,12 +104,17 @@ public class DatabaseManager {
         }
 
         migrateConfigurationColumns();
+        migrateDetailedResultColumns();
     }
 
     private void migrateConfigurationColumns() throws SQLException {
         addColumnIfMissing("Configurations", "language", "TEXT NOT NULL DEFAULT ''");
         addColumnIfMissing("Configurations", "source_extension", "TEXT NOT NULL DEFAULT ''");
         addColumnIfMissing("Configurations", "entry_point_pattern", "TEXT NOT NULL DEFAULT ''");
+    }
+
+    private void migrateDetailedResultColumns() throws SQLException {
+        addColumnIfMissing("DetailedResults", "status", "TEXT NOT NULL DEFAULT 'PENDING'");
     }
 
     private void addColumnIfMissing(String table, String column, String definition) throws SQLException {
@@ -241,18 +247,26 @@ public class DatabaseManager {
             ps.setString(3, testCase.getExpectedOutput());
             ps.executeUpdate();
             ResultSet keys = ps.getGeneratedKeys();
-            return keys.next() ? keys.getLong(1) : -1;
+            long generatedId = keys.next() ? keys.getLong(1) : -1;
+            if (generatedId > 0) {
+                testCase.setId(generatedId);
+            }
+            return generatedId;
         }
     }
 
     public List<TestCase> getTestCasesForProject(long projectId) throws SQLException {
         List<TestCase> list = new ArrayList<>();
-        String sql = "SELECT input, expected_output FROM TestCases WHERE project_id = ? ORDER BY id";
+        String sql = "SELECT id, input, expected_output FROM TestCases WHERE project_id = ? ORDER BY id";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setLong(1, projectId);
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
-                list.add(new TestCase(rs.getString("input"), rs.getString("expected_output")));
+                list.add(new TestCase(
+                        rs.getLong("id"),
+                        rs.getString("input"),
+                        rs.getString("expected_output")
+                ));
             }
         }
         return list;
@@ -392,20 +406,66 @@ public class DatabaseManager {
 
     //Detailed Results
 
-    public void insertDetailedResult(long submissionId, long testCaseId,
-                                     EvaluationResult evalResult) throws SQLException {
+    public void insertDetailedResult(long submissionId, PerTestResult result) throws SQLException {
         String sql = """
-            INSERT INTO DetailedResults (submission_id, test_case_id, actual_output, error_message, exit_code)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO DetailedResults (submission_id, test_case_id, status, actual_output, error_message, exit_code)
+            VALUES (?, ?, ?, ?, ?, ?)
             """;
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setLong(1, submissionId);
-            ps.setLong(2, testCaseId);
-            ps.setString(3, evalResult.getRunStdout());
-            ps.setString(4, evalResult.getRunStderr());
-            ps.setInt(5, evalResult.getRunExitCode());
+            ps.setLong(2, result.getTestCaseId());
+            ps.setString(3, result.getStatus() == null ? Status.RUNTIME_ERROR.name() : result.getStatus().name());
+            ps.setString(4, result.getActualOutput());
+            ps.setString(5, result.getErrorMessage());
+            ps.setInt(6, result.getExitCode());
             ps.executeUpdate();
         }
+    }
+
+    public void deleteDetailedResultsForSubmission(long submissionId) throws SQLException {
+        String sql = "DELETE FROM DetailedResults WHERE submission_id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, submissionId);
+            ps.executeUpdate();
+        }
+    }
+
+    public void replaceDetailedResults(long submissionId, List<PerTestResult> results) throws SQLException {
+        deleteDetailedResultsForSubmission(submissionId);
+        if (results == null) return;
+        for (PerTestResult result : results) {
+            insertDetailedResult(submissionId, result);
+        }
+    }
+
+    public List<PerTestResult> getDetailedResultsForSubmission(long submissionId) throws SQLException {
+        List<PerTestResult> list = new ArrayList<>();
+        String sql = """
+            SELECT test_case_id, status, actual_output, error_message, exit_code
+            FROM DetailedResults
+            WHERE submission_id = ?
+            ORDER BY id
+            """;
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, submissionId);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                Status status;
+                try {
+                    status = Status.valueOf(rs.getString("status"));
+                } catch (IllegalArgumentException | NullPointerException e) {
+                    status = Status.RUNTIME_ERROR;
+                }
+                list.add(new PerTestResult(
+                        rs.getLong("test_case_id"),
+                        status,
+                        rs.getString("actual_output"),
+                        rs.getString("error_message"),
+                        rs.getInt("exit_code")
+                ));
+            }
+        }
+        return list;
     }
     public List<Project> getProjects() throws SQLException {
         List<Project> projects = new ArrayList<>();
@@ -449,7 +509,7 @@ public class DatabaseManager {
         List<StudentZipSubmission> submissions = new ArrayList<>();
 
         String sql = """
-        SELECT student_id, zip_path, extracted_path, status, output, error_message
+        SELECT id, student_id, zip_path, extracted_path, status, output, error_message
         FROM StudentSubmissions
         WHERE project_id = ?
     """;
@@ -459,6 +519,7 @@ public class DatabaseManager {
             ResultSet rs = ps.executeQuery();
 
             while (rs.next()) {
+                long submissionId = rs.getLong("id");
                 File zipFile = new File(rs.getString("zip_path"));
                 StudentZipSubmission submission = new StudentZipSubmission(
                         rs.getString("student_id"),
@@ -482,6 +543,7 @@ public class DatabaseManager {
                 String errorMessage = rs.getString("error_message");
 
                 submission.setResult(new Result(status, output, errorMessage));
+                submission.setPerTestResults(getDetailedResultsForSubmission(submissionId));
 
                 submissions.add(submission);
             }

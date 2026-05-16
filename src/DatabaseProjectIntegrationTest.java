@@ -88,8 +88,23 @@ public class DatabaseProjectIntegrationTest {
         test("submissionUpsertDoesNotDuplicate", countRows(dbPath, "StudentSubmissions") == 1);
         test("submissionStatusUpdated", "WRONG_OUTPUT".equals(projectsReloaded(db).get(0).getSubmissions().get(0).getResult().getStatus().name()));
 
+        List<TestCase> reloadedTests = projectsReloaded(db).get(0).getTestCases();
+        test("testCaseIdAssignedOnLoad", reloadedTests.get(0).getId() > 0);
+
+        long submissionId = db.findSubmissionId(projectId, submission.getStudentId());
+        List<PerTestResult> details = new ArrayList<>();
+        details.add(new PerTestResult(reloadedTests.get(0).getId(), Status.SUCCESS, "2 5 10", "", 0));
+        db.replaceDetailedResults(submissionId, details);
+        test("detailedResultPersisted", countRows(dbPath, "DetailedResults") == 1);
+
+        List<PerTestResult> reloadedDetails = projectsReloaded(db).get(0).getSubmissions().get(0).getPerTestResults();
+        test("detailedResultRoundTrip", reloadedDetails.size() == 1
+                && reloadedDetails.get(0).getStatus() == Status.SUCCESS
+                && "2 5 10".equals(reloadedDetails.get(0).getActualOutput()));
+
         db.deleteSubmissionsForProject(projectId);
         test("submissionsDeletedForRerun", countRows(dbPath, "StudentSubmissions") == 0);
+        test("detailedResultsCascadeOnSubmissionDelete", countRows(dbPath, "DetailedResults") == 0);
 
         db.upsertSubmission(projectId, submission);
         db.deleteProject(projectId);

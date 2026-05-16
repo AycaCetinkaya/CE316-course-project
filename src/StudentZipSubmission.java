@@ -1,4 +1,7 @@
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class StudentZipSubmission {
 
@@ -6,6 +9,7 @@ public class StudentZipSubmission {
     private File zipFile;
     private File extractedFolder;
     private Result result;
+    private List<PerTestResult> perTestResults = new ArrayList<>();
 
     public StudentZipSubmission(String studentId, File zipFile) {
         this.studentId = studentId;
@@ -28,11 +32,19 @@ public class StudentZipSubmission {
         return result;
     }
 
+    public List<PerTestResult> getPerTestResults() {
+        return Collections.unmodifiableList(perTestResults);
+    }
+
     public void setExtractedFolder(File extractedFolder) {
         this.extractedFolder = extractedFolder;
     }
 
     public void setResult(Result result) {
         this.result = result;
+    }
+
+    public void setPerTestResults(List<PerTestResult> perTestResults) {
+        this.perTestResults = perTestResults == null ? new ArrayList<>() : new ArrayList<>(perTestResults);
     }
 }
