@@ -3,11 +3,15 @@ import javax.swing.border.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.table.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 public class IAEGui extends JFrame {
     private StudentZipSubmission currentSubmission;
@@ -1623,7 +1627,7 @@ public class IAEGui extends JFrame {
         btnExport.setPreferredSize(new Dimension(170, 46));
 
         btnRerun.addActionListener(e -> rerunCurrentProject());
-        btnExport.addActionListener(e -> JOptionPane.showMessageDialog(this, "Export feature will be added next."));
+        btnExport.addActionListener(e -> exportCurrentProjectResults());
 
         topActions.add(btnProjectDetails);
         topActions.add(btnRerun);
@@ -1690,6 +1694,194 @@ public class IAEGui extends JFrame {
     private String getFinalStatus(Status status) {
         if (status == null) return "Not Evaluated";
         return status == Status.SUCCESS ? "Passed" : "Failed";
+    }
+
+    private void exportCurrentProjectResults() {
+        if (currentProject == null || currentProject.getSubmissions() == null || currentProject.getSubmissions().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Nothing to export.");
+            return;
+        }
+
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Export Evaluation Results");
+
+        FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV Files (*.csv)", "csv");
+        FileNameExtensionFilter jsonFilter = new FileNameExtensionFilter("JSON Files (*.json)", "json");
+        fileChooser.addChoosableFileFilter(csvFilter);
+        fileChooser.addChoosableFileFilter(jsonFilter);
+        fileChooser.setFileFilter(csvFilter);
+        fileChooser.setSelectedFile(new File(sanitizeFileName(currentProject.getName()) + "_result"));
+
+        if (fileChooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        File saveFile = fileChooser.getSelectedFile();
+        String format = getExportFormat(saveFile, fileChooser.getFileFilter() == jsonFilter);
+        saveFile = ensureExtension(saveFile, format);
+
+        if (saveFile.exists()) {
+            int choice = JOptionPane.showConfirmDialog(
+                    this,
+                    "The file already exists. Overwrite it?",
+                    "Confirm Overwrite",
+                    JOptionPane.YES_NO_OPTION
+            );
+            if (choice != JOptionPane.YES_OPTION) {
+                return;
+            }
+        }
+
+        try {
+            String content = "json".equals(format)
+                    ? buildResultsJson(currentProject)
+                    : buildResultsCsv(currentProject);
+            Files.writeString(saveFile.toPath(), content, StandardCharsets.UTF_8);
+            JOptionPane.showMessageDialog(this, "Results exported successfully to:\n" + saveFile.getAbsolutePath());
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this, "Export failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private String getExportFormat(File file, boolean jsonFilterSelected) {
+        String name = file.getName().toLowerCase();
+        if (name.endsWith(".json")) return "json";
+        if (name.endsWith(".csv")) return "csv";
+        return jsonFilterSelected ? "json" : "csv";
+    }
+
+    private File ensureExtension(File file, String extension) {
+        String name = file.getName().toLowerCase();
+        if (name.endsWith("." + extension)) return file;
+        File parent = file.getParentFile();
+        return parent == null
+                ? new File(file.getName() + "." + extension)
+                : new File(parent, file.getName() + "." + extension);
+    }
+
+    private String sanitizeFileName(String value) {
+        if (value == null || value.isBlank()) return "evaluation";
+        String sanitized = value.replaceAll("[\\\\/:*?\"<>|]+", "_").trim();
+        return sanitized.isEmpty() ? "evaluation" : sanitized;
+    }
+
+    private String buildResultsCsv(Project project) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("project,student_id,final_status,compile_status,run_status,output_status,status,zip_file,extracted_folder,output,error_message,test_count,passed_tests,failed_tests\n");
+
+        for (StudentZipSubmission submission : project.getSubmissions()) {
+            Result result = submission.getResult();
+            Status status = result == null ? null : result.getStatus();
+            List<PerTestResult> perTestResults = submission.getPerTestResults();
+            int passedTests = 0;
+            for (PerTestResult perTestResult : perTestResults) {
+                if (perTestResult.getStatus() == Status.SUCCESS) {
+                    passedTests++;
+                }
+            }
+
+            appendCsvRow(sb,
+                    project.getName(),
+                    submission.getStudentId(),
+                    getFinalStatus(status),
+                    getCompileStatus(status),
+                    getRunStatus(status),
+                    getOutputStatus(status),
+                    status == null ? "PENDING" : status.name(),
+                    submission.getZipFile() == null ? "" : submission.getZipFile().getAbsolutePath(),
+                    submission.getExtractedFolder() == null ? "" : submission.getExtractedFolder().getAbsolutePath(),
+                    result == null ? "" : result.getOutput(),
+                    result == null ? "" : result.getErrorMessage(),
+                    String.valueOf(perTestResults.size()),
+                    String.valueOf(passedTests),
+                    String.valueOf(perTestResults.size() - passedTests)
+            );
+        }
+
+        return sb.toString();
+    }
+
+    private void appendCsvRow(StringBuilder sb, String... values) {
+        for (int i = 0; i < values.length; i++) {
+            if (i > 0) sb.append(',');
+            sb.append(csvValue(values[i]));
+        }
+        sb.append('\n');
+    }
+
+    private String csvValue(String value) {
+        if (value == null) return "";
+        boolean mustQuote = value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r");
+        String escaped = value.replace("\"", "\"\"");
+        return mustQuote ? "\"" + escaped + "\"" : escaped;
+    }
+
+    private String buildResultsJson(Project project) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\n");
+        sb.append("  \"project\": ").append(JsonUtil.encodeString(project.getName())).append(",\n");
+        sb.append("  \"submissions\": [\n");
+
+        List<StudentZipSubmission> submissions = project.getSubmissions();
+        for (int i = 0; i < submissions.size(); i++) {
+            StudentZipSubmission submission = submissions.get(i);
+            Result result = submission.getResult();
+            Status status = result == null ? null : result.getStatus();
+
+            sb.append("    {\n");
+            appendJsonField(sb, "student_id", submission.getStudentId(), 6, true);
+            appendJsonField(sb, "final_status", getFinalStatus(status), 6, true);
+            appendJsonField(sb, "compile_status", getCompileStatus(status), 6, true);
+            appendJsonField(sb, "run_status", getRunStatus(status), 6, true);
+            appendJsonField(sb, "output_status", getOutputStatus(status), 6, true);
+            appendJsonField(sb, "status", status == null ? "PENDING" : status.name(), 6, true);
+            appendJsonField(sb, "zip_file", submission.getZipFile() == null ? "" : submission.getZipFile().getAbsolutePath(), 6, true);
+            appendJsonField(sb, "extracted_folder", submission.getExtractedFolder() == null ? "" : submission.getExtractedFolder().getAbsolutePath(), 6, true);
+            appendJsonField(sb, "output", result == null ? "" : result.getOutput(), 6, true);
+            appendJsonField(sb, "error_message", result == null ? "" : result.getErrorMessage(), 6, true);
+            sb.append("      \"test_results\": [\n");
+
+            List<PerTestResult> perTestResults = submission.getPerTestResults();
+            for (int j = 0; j < perTestResults.size(); j++) {
+                PerTestResult perTestResult = perTestResults.get(j);
+                sb.append("        {\n");
+                appendJsonNumberField(sb, "test_case_id", perTestResult.getTestCaseId(), 10, true);
+                appendJsonField(sb, "status", perTestResult.getStatus() == null ? "" : perTestResult.getStatus().name(), 10, true);
+                appendJsonField(sb, "actual_output", perTestResult.getActualOutput(), 10, true);
+                appendJsonField(sb, "error_message", perTestResult.getErrorMessage(), 10, true);
+                appendJsonNumberField(sb, "exit_code", perTestResult.getExitCode(), 10, false);
+                sb.append("        }");
+                if (j < perTestResults.size() - 1) sb.append(',');
+                sb.append('\n');
+            }
+
+            sb.append("      ]\n");
+            sb.append("    }");
+            if (i < submissions.size() - 1) sb.append(',');
+            sb.append('\n');
+        }
+
+        sb.append("  ]\n");
+        sb.append("}\n");
+        return sb.toString();
+    }
+
+    private void appendJsonField(StringBuilder sb, String key, String value, int spaces, boolean comma) {
+        sb.append(" ".repeat(spaces))
+                .append(JsonUtil.encodeString(key))
+                .append(": ")
+                .append(JsonUtil.encodeString(value));
+        if (comma) sb.append(',');
+        sb.append('\n');
+    }
+
+    private void appendJsonNumberField(StringBuilder sb, String key, long value, int spaces, boolean comma) {
+        sb.append(" ".repeat(spaces))
+                .append(JsonUtil.encodeString(key))
+                .append(": ")
+                .append(value);
+        if (comma) sb.append(',');
+        sb.append('\n');
     }
 
     private void openStudentDetails(StudentZipSubmission submission) {
