@@ -807,14 +807,27 @@ public class IAEGui extends JFrame {
         }
     }
 
-    private void deleteConfigurationFromDb(String name) {
+    private boolean deleteConfigurationFromDb(String name) {
         DatabaseManager db = new DatabaseManager();
         try {
             db.connect();
             db.initSchema();
             db.deleteConfigurationByName(name);
+            return true;
+        } catch (java.sql.SQLException ex) {
+            if (ex.getMessage() != null && ex.getMessage().contains("FOREIGN KEY")) {
+                JOptionPane.showMessageDialog(this,
+                        "Cannot delete '" + name + "' because it is used by a saved project.\n" +
+                                "Delete the project first, or change its configuration to a different one.",
+                        "Configuration In Use",
+                        JOptionPane.WARNING_MESSAGE);
+            } else {
+                ex.printStackTrace();
+            }
+            return false;
         } catch (Exception ex) {
             ex.printStackTrace();
+            return false;
         } finally {
             db.disconnect();
         }
@@ -1214,9 +1227,10 @@ public class IAEGui extends JFrame {
                     int confirm = JOptionPane.showConfirmDialog(panel,
                             "Delete configuration: " + currentConfig.getName() + "?", "Confirm", JOptionPane.YES_NO_OPTION);
                     if (confirm == JOptionPane.YES_OPTION) {
-                        allConfigs.remove(currentConfig);
-                        deleteConfigurationFromDb(currentConfig.getName());
-                        refreshConfigPage();
+                        if (deleteConfigurationFromDb(currentConfig.getName())) {
+                            allConfigs.remove(currentConfig);
+                            refreshConfigPage();
+                        }
                     }
                 }
             });

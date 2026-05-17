@@ -273,6 +273,11 @@ public class DatabaseManager {
     }
 
     public void deleteTestCasesForProject(long projectId) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(
+                "DELETE FROM DetailedResults WHERE test_case_id IN (SELECT id FROM TestCases WHERE project_id = ?)")) {
+            ps.setLong(1, projectId);
+            ps.executeUpdate();
+        }
         String sql = "DELETE FROM TestCases WHERE project_id = ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setLong(1, projectId);
