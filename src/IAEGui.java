@@ -12,7 +12,11 @@ import javax.swing.table.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
-
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.awt.image.BufferedImage;
+import java.util.Map;
+import java.util.HashMap;
 public class IAEGui extends JFrame {
     private StudentZipSubmission currentSubmission;
     private JLabel topBarTitle;
@@ -29,6 +33,7 @@ public class IAEGui extends JFrame {
     private JTextField txtInputFile;
     private JTextField txtExpectedOutputFile;
     private JTextField txtSubmissionsFolder;
+    private final Map<String, ProjectFilePaths> projectPathsByName = new HashMap<>();
 
     private final List<Project> recentProjects = new ArrayList<>();
 
@@ -46,6 +51,8 @@ public class IAEGui extends JFrame {
     private final Font FONT_BODY = new Font("SansSerif", Font.PLAIN, 13);
     private int resultsPage = 1;
     private final int resultsPerPage = 8;
+    private int recentProjectsPage = 1;
+    private final int recentProjectsPerPage = 5;
 
     public IAEGui() {
         this.configStore = new ConfigStore();
@@ -63,6 +70,7 @@ public class IAEGui extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1400, 850);
         setMinimumSize(new Dimension(1000, 650));
+        setExtendedState(JFrame.MAXIMIZED_BOTH);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
@@ -101,6 +109,7 @@ public class IAEGui extends JFrame {
         mainContentPanel.add(wrapWithScroll(createCreateProjectPanel()), "createProject");
         mainContentPanel.add(wrapWithScroll(createConfigurationsPanel()), "configurations");
         mainContentPanel.add(wrapWithScroll(createHelpPanel()), "help");
+        mainContentPanel.add(wrapWithScroll(createProjectDetailsPanel()), "projectDetails");
         mainContentPanel.add(wrapWithScroll(createEvaluationResultsPanel()), "evaluationResults");
         mainContentPanel.add(wrapWithScroll(createStudentDetailsPanel()), "studentDetails");
     }
@@ -236,6 +245,8 @@ public class IAEGui extends JFrame {
                 return "Help";
             case "evaluationResults":
                 return "Evaluation Results";
+            case "projectDetails":
+                return "Project Details";
             case "studentDetails":
                 return "Student Details";
             default:
@@ -390,8 +401,8 @@ public class IAEGui extends JFrame {
     private JPanel createRecentProjectsPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBackground(BG_CARD);
-        panel.setMaximumSize(new Dimension(1050, 300));
-        panel.setPreferredSize(new Dimension(1050, 300));
+        panel.setMaximumSize(new Dimension(1050, 520));
+        panel.setPreferredSize(new Dimension(1050, 520));
         panel.setAlignmentX(Component.LEFT_ALIGNMENT);
         panel.setBorder(new LineBorder(BORDER_COLOR, 1, true));
 
@@ -414,20 +425,100 @@ public class IAEGui extends JFrame {
         list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
         list.setBackground(BG_CARD);
 
-        if (recentProjects.isEmpty()) {
-            JLabel empty = new JLabel("No projects have been evaluated yet.");
-            empty.setFont(FONT_BODY);
-            empty.setForeground(TEXT_SECONDARY);
-            empty.setBorder(new EmptyBorder(25, 20, 20, 20));
-            list.add(empty);
-        } else {
-            for (int i = recentProjects.size() - 1; i >= 0; i--) {
-                list.add(createProjectRow(recentProjects.get(i)));
+        JPanel footer = new JPanel(new BorderLayout());
+        footer.setBackground(BG_CARD);
+        footer.setBorder(new EmptyBorder(12, 20, 12, 20));
+
+        JLabel showing = new JLabel();
+        showing.setFont(FONT_BODY);
+        showing.setForeground(TEXT_SECONDARY);
+
+        JPanel pagination = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0));
+        pagination.setBackground(BG_CARD);
+
+        JButton prev = createSecondaryButton("«");
+        JButton page = createBluePrimaryButton(String.valueOf(recentProjectsPage));
+        JButton next = createSecondaryButton("»");
+
+        prev.setPreferredSize(new Dimension(44, 34));
+        page.setPreferredSize(new Dimension(44, 34));
+        next.setPreferredSize(new Dimension(44, 34));
+
+        pagination.add(prev);
+        pagination.add(page);
+        pagination.add(next);
+
+        footer.add(showing, BorderLayout.WEST);
+        footer.add(pagination, BorderLayout.CENTER);
+
+        final Runnable[] refreshRecentProjects = new Runnable[1];
+
+        refreshRecentProjects[0] = () -> {
+            list.removeAll();
+
+            if (recentProjects.isEmpty()) {
+                JLabel empty = new JLabel("No projects have been evaluated yet.");
+                empty.setFont(FONT_BODY);
+                empty.setForeground(TEXT_SECONDARY);
+                empty.setBorder(new EmptyBorder(25, 20, 20, 20));
+                list.add(empty);
+
+                showing.setText("No projects");
+                page.setText("1");
+                prev.setEnabled(false);
+                next.setEnabled(false);
+
+                list.revalidate();
+                list.repaint();
+                return;
             }
-        }
+
+            List<Project> orderedProjects = new ArrayList<>();
+
+            for (int i = recentProjects.size() - 1; i >= 0; i--) {
+                orderedProjects.add(recentProjects.get(i));
+            }
+
+            int totalRows = orderedProjects.size();
+            int totalPages = Math.max(1, (int) Math.ceil(totalRows / (double) recentProjectsPerPage));
+
+            if (recentProjectsPage > totalPages) recentProjectsPage = totalPages;
+            if (recentProjectsPage < 1) recentProjectsPage = 1;
+
+            int start = (recentProjectsPage - 1) * recentProjectsPerPage;
+            int end = Math.min(start + recentProjectsPerPage, totalRows);
+
+            for (int i = start; i < end; i++) {
+                list.add(createProjectRow(orderedProjects.get(i)));
+            }
+
+            showing.setText("Showing " + (start + 1) + " to " + end + " of " + totalRows + " projects");
+
+            page.setText(String.valueOf(recentProjectsPage));
+            prev.setEnabled(recentProjectsPage > 1);
+            next.setEnabled(recentProjectsPage < totalPages);
+
+            list.revalidate();
+            list.repaint();
+        };
+
+        prev.addActionListener(e -> {
+            if (recentProjectsPage > 1) {
+                recentProjectsPage--;
+                refreshRecentProjects[0].run();
+            }
+        });
+
+        next.addActionListener(e -> {
+            recentProjectsPage++;
+            refreshRecentProjects[0].run();
+        });
+
+        refreshRecentProjects[0].run();
 
         panel.add(header, BorderLayout.NORTH);
         panel.add(list, BorderLayout.CENTER);
+        panel.add(footer, BorderLayout.SOUTH);
 
         return panel;
     }
@@ -486,12 +577,18 @@ public class IAEGui extends JFrame {
         ));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 72));
 
-        JLabel icon = new JLabel("▤", SwingConstants.CENTER);
+        Icon projectIcon = UIManager.getIcon("Tree.leafIcon");
+
+        JLabel icon = new JLabel(projectIcon, SwingConstants.CENTER);
         icon.setOpaque(true);
         icon.setBackground(new Color(232, 241, 246));
-        icon.setForeground(new Color(19, 99, 128));
-        icon.setFont(new Font("SansSerif", Font.BOLD, 16));
         icon.setPreferredSize(new Dimension(38, 38));
+
+        if (projectIcon == null) {
+            icon.setText("▤");
+            icon.setForeground(new Color(19, 99, 128));
+            icon.setFont(new Font("SansSerif", Font.BOLD, 16));
+        }
 
         JLabel left = new JLabel(
                 "<html><b>" + name + "</b><br>" +
@@ -711,6 +808,9 @@ public class IAEGui extends JFrame {
         try {
             String projectName = getRealText(txtProjectName, "e.g., Data Structures - Assignment 1");
             String selected = (String) cmbConfiguration.getSelectedItem();
+            String inputPath = getRealText(txtInputFile, "Select input file...");
+            String expectedPath = getRealText(txtExpectedOutputFile, "Select expected output file...");
+            String submissionsPath = getRealText(txtSubmissionsFolder, "Select folder containing ZIP files...");
 
             if (projectName.isEmpty() || selected == null) {
                 JOptionPane.showMessageDialog(this, "Please fill project name and configuration.");
@@ -727,6 +827,7 @@ public class IAEGui extends JFrame {
                 db.connect();
                 db.initSchema();
                 db.saveProject(projectName, projectConfig, buildTestCasesFromForm());
+                rememberProjectPaths(projectName, inputPath, expectedPath, submissionsPath);
             } finally {
                 db.disconnect();
             }
@@ -837,6 +938,8 @@ public class IAEGui extends JFrame {
         final String projectName = getRealText(txtProjectName, "e.g., Data Structures - Assignment 1");
         final String submissionsPath = getRealText(txtSubmissionsFolder, "Select folder containing ZIP files...");
         final String selected = (String) cmbConfiguration.getSelectedItem();
+        final String inputPath = getRealText(txtInputFile, "Select input file...");
+        final String expectedPath = getRealText(txtExpectedOutputFile, "Select expected output file...");
 
         if (projectName.isEmpty() || submissionsPath.isEmpty() || selected == null) {
             JOptionPane.showMessageDialog(this, "Please fill project name and submissions folder.");
@@ -866,6 +969,8 @@ public class IAEGui extends JFrame {
                         ex.printStackTrace();
                     }
                     currentProject = project;
+                    rememberProjectPaths(projectName, inputPath, expectedPath, submissionsPath);
+
                     JOptionPane.showMessageDialog(this, "Project evaluated successfully.");
                     refreshDashboard();
                 },
@@ -1696,6 +1801,423 @@ public class IAEGui extends JFrame {
             super.paintComponent(g);
         }
     }
+
+    private void openProjectDetails(Project project) {
+        this.currentProject = project;
+
+        mainContentPanel.removeAll();
+        addPages();
+
+        if (topBarTitle != null) {
+            topBarTitle.setText("   Project Details");
+        }
+
+        cardLayout.show(mainContentPanel, "projectDetails");
+        mainContentPanel.revalidate();
+        mainContentPanel.repaint();
+    }
+    private JPanel createProjectDetailsPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(BG_CANVAS);
+        panel.setBorder(new EmptyBorder(30, 185, 35, 60));
+
+        if (currentProject == null) {
+            JPanel emptyPanel = new JPanel();
+            emptyPanel.setBackground(BG_CANVAS);
+            emptyPanel.setLayout(new BoxLayout(emptyPanel, BoxLayout.Y_AXIS));
+
+            JLabel title = new JLabel("Project Details");
+            title.setFont(FONT_HEADER);
+            title.setForeground(TEXT_PRIMARY);
+
+            JLabel subtitle = new JLabel("No project selected.");
+            subtitle.setFont(FONT_BODY);
+            subtitle.setForeground(TEXT_SECONDARY);
+            subtitle.setBorder(new EmptyBorder(8, 0, 0, 0));
+
+            emptyPanel.add(title);
+            emptyPanel.add(subtitle);
+
+            panel.add(emptyPanel, BorderLayout.NORTH);
+            return panel;
+        }
+
+        int[] stats = calculateProjectStats(currentProject);
+        int total = stats[0];
+        int passed = stats[1];
+        int failed = stats[2];
+        int passRate = total == 0 ? 0 : (int) Math.round((passed * 100.0) / total);
+
+        JPanel content = new JPanel();
+        content.setBackground(BG_CANVAS);
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JButton back = createTextButton("←  Back to Evaluation Results");
+        back.addActionListener(e -> openEvaluationResults(currentProject));
+
+        JPanel headerRow = new JPanel(new BorderLayout());
+        headerRow.setBackground(BG_CANVAS);
+        headerRow.setMaximumSize(new Dimension(950, 95));
+        headerRow.setPreferredSize(new Dimension(950, 95));
+        headerRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel titleBox = new JPanel();
+        titleBox.setBackground(BG_CANVAS);
+        titleBox.setLayout(new BoxLayout(titleBox, BoxLayout.Y_AXIS));
+
+        JLabel title = new JLabel(currentProject.getName());
+        title.setFont(FONT_HEADER);
+        title.setForeground(TEXT_PRIMARY);
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel projectId = new JLabel("Project ID: " + (currentProject.getId() > 0 ? currentProject.getId() : "N/A"));
+        projectId.setFont(FONT_BODY);
+        projectId.setForeground(TEXT_SECONDARY);
+        projectId.setBorder(new EmptyBorder(8, 0, 0, 0));
+        projectId.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        titleBox.add(back);
+        titleBox.add(Box.createVerticalStrut(18));
+        titleBox.add(title);
+        titleBox.add(projectId);
+
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        actions.setBackground(BG_CANVAS);
+        actions.setBorder(new EmptyBorder(42, 0, 0, 0));
+
+        JButton btnViewResults = createToolbarButton("results", "View Results", false);
+        JButton btnRunAgain = createOrangeButton("▷  Run Again");
+
+        btnViewResults.setPreferredSize(new Dimension(160, 40));
+        btnRunAgain.setPreferredSize(new Dimension(130, 40));
+
+        btnViewResults.addActionListener(e -> openEvaluationResults(currentProject));
+        btnRunAgain.addActionListener(e -> rerunCurrentProject());
+
+        actions.add(btnViewResults);
+        actions.add(btnRunAgain);
+
+        headerRow.add(titleBox, BorderLayout.WEST);
+        headerRow.add(actions, BorderLayout.EAST);
+
+        JPanel topCards = new JPanel(new GridLayout(1, 2, 18, 0));
+        topCards.setBackground(BG_CANVAS);
+        topCards.setMaximumSize(new Dimension(950, 210));
+        topCards.setPreferredSize(new Dimension(950, 210));
+        topCards.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        topCards.add(createProjectConfigurationDetailsCard(currentProject));
+        topCards.add(createProjectResultsSummaryCard(total, passed, failed, passRate));
+
+        JPanel filesCard = createProjectFilesDetailsCard(currentProject);
+        filesCard.setMaximumSize(new Dimension(950, 300));
+        filesCard.setPreferredSize(new Dimension(950, 300));
+        filesCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel infoBox = createProjectInfoBox(currentProject, total);
+        infoBox.setMaximumSize(new Dimension(950, 78));
+        infoBox.setPreferredSize(new Dimension(950, 78));
+        infoBox.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        content.add(headerRow);
+        content.add(Box.createVerticalStrut(24));
+        content.add(topCards);
+        content.add(Box.createVerticalStrut(22));
+        content.add(filesCard);
+        content.add(Box.createVerticalStrut(22));
+        content.add(infoBox);
+
+        panel.add(content, BorderLayout.NORTH);
+        return panel;
+    }
+    private int[] calculateProjectStats(Project project) {
+        int total = project.getSubmissions() == null ? 0 : project.getSubmissions().size();
+        int passed = 0;
+        int failed = 0;
+
+        if (project.getSubmissions() != null) {
+            for (StudentZipSubmission submission : project.getSubmissions()) {
+                if (submission.getResult() != null &&
+                        submission.getResult().getStatus() == Status.SUCCESS) {
+                    passed++;
+                } else {
+                    failed++;
+                }
+            }
+        }
+
+        return new int[]{total, passed, failed};
+    }
+
+    private JPanel createProjectConfigurationDetailsCard(Project project) {
+        JPanel card = new JPanel(new BorderLayout());
+        card.setBackground(BG_CARD);
+        card.setBorder(new LineBorder(BORDER_COLOR, 1, true));
+
+        JLabel title = new JLabel("⚙  Configuration");
+        title.setFont(FONT_SUBHEADER);
+        title.setForeground(TEXT_PRIMARY);
+        title.setBorder(new EmptyBorder(18, 20, 12, 20));
+
+        JPanel body = new JPanel();
+        body.setBackground(BG_CARD);
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBorder(new EmptyBorder(10, 20, 18, 20));
+
+        Configuration config = project.getConfiguration();
+
+        String configName = config == null ? "AUTO" : safeText(config.getName(), "AUTO");
+        String createdDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+
+        body.add(createDetailsTextRow("Language Configuration", configName));
+        body.add(Box.createVerticalStrut(18));
+        body.add(createDetailsTextRow("Created Date", createdDate));
+
+        card.add(title, BorderLayout.NORTH);
+        card.add(body, BorderLayout.CENTER);
+
+        return card;
+    }
+
+    private JPanel createProjectResultsSummaryCard(int total, int passed, int failed, int passRate) {
+        JPanel card = new JPanel(new BorderLayout());
+        card.setBackground(BG_CARD);
+        card.setBorder(new LineBorder(BORDER_COLOR, 1, true));
+
+        JLabel title = new JLabel("Results Summary");
+        title.setIcon(createUiIcon("results", new Color(19, 99, 128), 16));
+        title.setIconTextGap(8);
+        title.setFont(FONT_SUBHEADER);
+        title.setForeground(TEXT_PRIMARY);
+        title.setBorder(new EmptyBorder(18, 20, 12, 20));
+
+        JPanel body = new JPanel();
+        body.setBackground(BG_CARD);
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBorder(new EmptyBorder(8, 20, 18, 20));
+
+        body.add(createSummaryRow("Total Students", String.valueOf(total), TEXT_PRIMARY));
+        body.add(Box.createVerticalStrut(14));
+        body.add(createSummaryRow("Passed", String.valueOf(passed), new Color(5, 150, 105)));
+        body.add(Box.createVerticalStrut(14));
+        body.add(createSummaryRow("Failed", String.valueOf(failed), new Color(220, 38, 38)));
+        body.add(Box.createVerticalStrut(14));
+
+        JSeparator separator = new JSeparator();
+        separator.setForeground(BORDER_COLOR);
+        separator.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
+        body.add(separator);
+        body.add(Box.createVerticalStrut(14));
+
+        body.add(createSummaryRow("Pass Rate", passRate + "%", ACCENT_ORANGE));
+
+        card.add(title, BorderLayout.NORTH);
+        card.add(body, BorderLayout.CENTER);
+
+        return card;
+    }
+
+    private JPanel createProjectFilesDetailsCard(Project project) {
+        JPanel card = new JPanel(new BorderLayout());
+        card.setBackground(BG_CARD);
+        card.setBorder(new LineBorder(BORDER_COLOR, 1, true));
+
+        Icon folderIcon = UIManager.getIcon("FileView.directoryIcon");
+
+        JLabel title = new JLabel("Files and Folders");
+        title.setIcon(folderIcon);
+        title.setIconTextGap(8);
+        title.setFont(FONT_SUBHEADER);
+        title.setForeground(TEXT_PRIMARY);
+        title.setBorder(new EmptyBorder(18, 20, 14, 20));
+
+        JPanel body = new JPanel();
+        body.setBackground(BG_CARD);
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBorder(new EmptyBorder(8, 20, 18, 20));
+
+        ProjectFilePaths paths = getProjectPaths(project);
+
+        String inputPath = showPathOrFallback(paths.inputFilePath, "No input file path saved");
+        String expectedPath = showPathOrFallback(paths.expectedOutputFilePath, "No expected output file path saved");
+        String submissionsPath = showPathOrFallback(paths.submissionsFolderPath, "No submissions folder path saved");
+
+        body.add(createPathDetailsRow("Input File", inputPath, "View", paths.inputFilePath));
+        body.add(Box.createVerticalStrut(14));
+
+        body.add(createPathDetailsRow("Expected Output File", expectedPath, "View", paths.expectedOutputFilePath));
+        body.add(Box.createVerticalStrut(14));
+
+        body.add(createPathDetailsRow("Student Submissions Folder", submissionsPath, "Open", paths.submissionsFolderPath));
+
+        card.add(title, BorderLayout.NORTH);
+        card.add(body, BorderLayout.CENTER);
+
+        return card;
+    }
+
+    private JPanel createProjectInfoBox(Project project, int totalStudents) {
+        JPanel box = new JPanel(new BorderLayout());
+        box.setBackground(new Color(255, 251, 247));
+        box.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(new Color(253, 186, 116), 1, true),
+                new EmptyBorder(14, 18, 14, 18)
+        ));
+
+        Configuration config = project.getConfiguration();
+        String language = config == null ? "AUTO" : safeText(config.getLanguage(), "AUTO");
+
+        JLabel text = new JLabel(
+                "<html><b style='color:#EA7317;'>▤  Project Information</b><br>" +
+                        "<span style='color:#64748B;'>This project evaluates " +
+                        totalStudents + " student submissions using the " +
+                        language + " language configuration.</span></html>"
+        );
+        text.setFont(FONT_BODY);
+
+        box.add(text, BorderLayout.CENTER);
+        return box;
+    }
+
+    private JPanel createDetailsTextRow(String labelText, String valueText) {
+        JPanel row = new JPanel();
+        row.setBackground(BG_CARD);
+        row.setLayout(new BoxLayout(row, BoxLayout.Y_AXIS));
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel label = new JLabel(labelText);
+        label.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        label.setForeground(TEXT_SECONDARY);
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel value = new JLabel(valueText);
+        value.setFont(new Font("SansSerif", Font.BOLD, 13));
+        value.setForeground(TEXT_PRIMARY);
+        value.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        row.add(label);
+        row.add(Box.createVerticalStrut(4));
+        row.add(value);
+
+        return row;
+    }
+
+    private JPanel createSummaryRow(String labelText, String valueText, Color valueColor) {
+        JPanel row = new JPanel(new BorderLayout());
+        row.setBackground(BG_CARD);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+
+        JLabel label = new JLabel(labelText);
+        label.setFont(FONT_BODY);
+        label.setForeground(TEXT_SECONDARY);
+
+        JLabel value = new JLabel(valueText);
+        value.setFont(new Font("SansSerif", Font.BOLD, 15));
+        value.setForeground(valueColor);
+        value.setHorizontalAlignment(SwingConstants.RIGHT);
+
+        row.add(label, BorderLayout.WEST);
+        row.add(value, BorderLayout.EAST);
+
+        return row;
+    }
+
+    private JPanel createPathDetailsRow(String labelText, String valueText, String actionText, String pathToOpen) {
+        JPanel wrapper = new JPanel();
+        wrapper.setBackground(BG_CARD);
+        wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.Y_AXIS));
+        wrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
+        wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, 62));
+
+        JLabel label = new JLabel(labelText);
+        label.setFont(new Font("SansSerif", Font.BOLD, 12));
+        label.setForeground(TEXT_SECONDARY);
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        label.setHorizontalAlignment(SwingConstants.LEFT);
+        label.setMaximumSize(new Dimension(Integer.MAX_VALUE, 16));
+
+        JPanel pathBox = new JPanel(new BorderLayout(12, 0));
+        pathBox.setBackground(new Color(248, 250, 252));
+        pathBox.setBorder(new EmptyBorder(9, 12, 9, 12));
+        pathBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        pathBox.setPreferredSize(new Dimension(0, 38));
+        pathBox.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel value = new JLabel(valueText);
+        value.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        value.setForeground(TEXT_PRIMARY);
+        value.setToolTipText(valueText);
+
+        JLabel action = new JLabel(actionText);
+        action.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        action.setForeground(new Color(19, 99, 128));
+        action.setHorizontalAlignment(SwingConstants.RIGHT);
+        action.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+        MouseAdapter openListener = new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                openFileOrFolder(pathToOpen);
+            }
+        };
+
+        action.addMouseListener(openListener);
+        pathBox.addMouseListener(openListener);
+
+        pathBox.add(value, BorderLayout.CENTER);
+        pathBox.add(action, BorderLayout.EAST);
+
+        wrapper.add(label);
+        wrapper.add(Box.createVerticalStrut(6));
+        wrapper.add(pathBox);
+
+        return wrapper;
+    }
+
+    private String getProjectTestCasesText(Project project) {
+        if (project.getTestCases() == null || project.getTestCases().isEmpty()) {
+            return "No test cases";
+        }
+
+        return project.getTestCases().size() + " test case(s)";
+    }
+
+    private String getProjectFirstZipPath(Project project) {
+        if (project.getSubmissions() == null || project.getSubmissions().isEmpty()) {
+            return "No ZIP file found";
+        }
+
+        for (StudentZipSubmission submission : project.getSubmissions()) {
+            if (submission.getZipFile() != null) {
+                return submission.getZipFile().getAbsolutePath();
+            }
+        }
+
+        return "No ZIP file found";
+    }
+
+    private String getProjectSubmissionsFolder(Project project) {
+        if (project.getSubmissions() == null || project.getSubmissions().isEmpty()) {
+            return "No submissions folder found";
+        }
+
+        for (StudentZipSubmission submission : project.getSubmissions()) {
+            if (submission.getZipFile() != null && submission.getZipFile().getParentFile() != null) {
+                return submission.getZipFile().getParentFile().getAbsolutePath();
+            }
+        }
+
+        return "No submissions folder found";
+    }
+
+    private String safeText(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+
+        return value;
+    }
     private void openEvaluationResults(Project project) {
         this.currentProject = project;
 
@@ -1777,7 +2299,7 @@ public class IAEGui extends JFrame {
         topActions.setBackground(BG_CANVAS);
         topActions.setBorder(new EmptyBorder(6, 0, 0, 0));
 
-        JButton btnProjectDetails = createToolbarButton("file", "Project Details", false);
+        JButton btnProjectDetails = createInfoToolbarButton("Project Details");
         JButton btnRerun = createToolbarButton("refresh", "Re-run", false);
         JButton btnExport = createToolbarButton("download", "Export Results", true);
 
@@ -1785,6 +2307,7 @@ public class IAEGui extends JFrame {
         btnRerun.setPreferredSize(new Dimension(125, 46));
         btnExport.setPreferredSize(new Dimension(170, 46));
 
+        btnProjectDetails.addActionListener(e -> openProjectDetails(currentProject));
         btnRerun.addActionListener(e -> rerunCurrentProject());
         btnExport.addActionListener(e -> exportCurrentProjectResults());
 
@@ -1799,12 +2322,12 @@ public class IAEGui extends JFrame {
         content.setBackground(BG_CANVAS);
 
         JPanel tableCard = createModernStudentResultsTable();
-        tableCard.setPreferredSize(new Dimension(950, 620));
+        tableCard.setPreferredSize(new Dimension(950, 650));
 
         JPanel rightArea = new JPanel();
         rightArea.setBackground(BG_CANVAS);
         rightArea.setLayout(new BoxLayout(rightArea, BoxLayout.Y_AXIS));
-        rightArea.setPreferredSize(new Dimension(340, 620));
+        rightArea.setPreferredSize(new Dimension(340, 650));
 
         rightArea.add(createSideStatCard("Total Students", String.valueOf(total), "users",
                 new Color(37, 99, 235), new Color(219, 234, 254)));
@@ -1819,6 +2342,19 @@ public class IAEGui extends JFrame {
         rightArea.add(Box.createVerticalStrut(14));
 
         rightArea.add(createPassRateCard(passRate, passed, total));
+        rightArea.add(Box.createVerticalGlue());
+
+        JPanel returnDashboardBox = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        returnDashboardBox.setBackground(BG_CANVAS);
+        returnDashboardBox.setMaximumSize(new Dimension(340, 44));
+        returnDashboardBox.setPreferredSize(new Dimension(340, 44));
+
+        JButton btnReturnDashboard = createSecondaryButton("←  Return Dashboard");
+        btnReturnDashboard.setPreferredSize(new Dimension(170, 40));
+        btnReturnDashboard.addActionListener(e -> showPage("dashboard", btnDashboard));
+
+        returnDashboardBox.add(btnReturnDashboard);
+        rightArea.add(returnDashboardBox);
 
         content.add(tableCard, BorderLayout.CENTER);
         content.add(rightArea, BorderLayout.EAST);
@@ -2885,6 +3421,15 @@ public class IAEGui extends JFrame {
                     g2.drawLine(x + s * 3 / 4, y + s / 4, x + s * 3 / 4, y + s / 3);
                     break;
 
+                case "results":
+                    g2.drawLine(x + s / 5, y + s * 4 / 5, x + s * 4 / 5, y + s * 4 / 5);
+                    g2.drawLine(x + s / 5, y + s / 5, x + s / 5, y + s * 4 / 5);
+
+                    g2.fillRoundRect(x + s / 3, y + s * 3 / 5, s / 10, s / 5, 2, 2);
+                    g2.fillRoundRect(x + s / 2, y + s * 9 / 20, s / 10, s * 7 / 20, 2, 2);
+                    g2.fillRoundRect(x + s * 2 / 3, y + s / 3, s / 10, s * 7 / 15, 2, 2);
+                    break;
+
                 case "refresh":
                     g2.drawArc(x + s / 5, y + s / 5, s * 3 / 5, s * 3 / 5, 35, 285);
                     g2.drawLine(x + s * 3 / 4, y + s / 3, x + s * 7 / 8, y + s / 3);
@@ -2969,6 +3514,127 @@ public class IAEGui extends JFrame {
 
             g2.dispose();
             super.paintComponent(g);
+        }
+    }
+    private JButton createInfoToolbarButton(String text) {
+        JButton btn = createToolbarButton("file", text, false);
+
+        Icon infoIcon = UIManager.getIcon("OptionPane.informationIcon");
+
+        if (infoIcon != null) {
+            btn.setIcon(resizeIcon(infoIcon, 18, 18));
+        }
+
+        btn.setIconTextGap(10);
+        return btn;
+    }
+    private Icon resizeIcon(Icon icon, int width, int height) {
+        if (icon == null) return null;
+
+        BufferedImage image = new BufferedImage(
+                icon.getIconWidth(),
+                icon.getIconHeight(),
+                BufferedImage.TYPE_INT_ARGB
+        );
+
+        Graphics2D g2 = image.createGraphics();
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        icon.paintIcon(null, g2, 0, 0);
+        g2.dispose();
+
+        Image scaledImage = image.getScaledInstance(width, height, Image.SCALE_SMOOTH);
+        return new ImageIcon(scaledImage);
+    }
+    private String getProjectInputFileText(Project project) {
+        if (project.getTestCases() == null || project.getTestCases().isEmpty()) {
+            return "No input file selected";
+        }
+
+        return "Input data saved in " + project.getTestCases().size() + " test case(s)";
+    }
+
+    private String getProjectExpectedOutputFileText(Project project) {
+        if (project.getTestCases() == null || project.getTestCases().isEmpty()) {
+            return "No expected output file selected";
+        }
+
+        return "Expected output saved in " + project.getTestCases().size() + " test case(s)";
+    }
+    private static class ProjectFilePaths {
+        String inputFilePath;
+        String expectedOutputFilePath;
+        String submissionsFolderPath;
+
+        ProjectFilePaths(String inputFilePath, String expectedOutputFilePath, String submissionsFolderPath) {
+            this.inputFilePath = inputFilePath;
+            this.expectedOutputFilePath = expectedOutputFilePath;
+            this.submissionsFolderPath = submissionsFolderPath;
+        }
+    }
+    private void rememberProjectPaths(String projectName, String inputPath, String expectedPath, String submissionsPath) {
+        if (projectName == null || projectName.isBlank()) return;
+
+        projectPathsByName.put(
+                projectName,
+                new ProjectFilePaths(inputPath, expectedPath, submissionsPath)
+        );
+    }
+
+    private ProjectFilePaths getProjectPaths(Project project) {
+        if (project == null || project.getName() == null) {
+            return new ProjectFilePaths("", "", "");
+        }
+
+        ProjectFilePaths paths = projectPathsByName.get(project.getName());
+
+        if (paths != null) {
+            return paths;
+        }
+
+        return new ProjectFilePaths(
+                "",
+                "",
+                getProjectSubmissionsFolder(project)
+        );
+    }
+
+    private String showPathOrFallback(String path, String fallback) {
+        if (path == null || path.isBlank()) {
+            return fallback;
+        }
+
+        return path;
+    }
+    private void openFileOrFolder(String path) {
+        if (path == null || path.isBlank()) {
+            JOptionPane.showMessageDialog(this, "No file or folder path available.");
+            return;
+        }
+
+        File file = new File(path);
+
+        if (!file.exists()) {
+            JOptionPane.showMessageDialog(this, "Path does not exist:\n" + path);
+            return;
+        }
+
+        if (!Desktop.isDesktopSupported()) {
+            JOptionPane.showMessageDialog(this, "Opening files is not supported on this system.");
+            return;
+        }
+
+        try {
+            Desktop.getDesktop().open(file);
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Could not open:\n" + path + "\n\n" + ex.getMessage(),
+                    "Open Failed",
+                    JOptionPane.ERROR_MESSAGE
+            );
         }
     }
 }
