@@ -52,6 +52,7 @@ public class IAEGui extends JFrame {
         this.allConfigs = loadConfigurationsFromDb();
         if (this.allConfigs.isEmpty()) {
             allConfigs.add(new Configuration("C Config", "C", "gcc *.c -o main", "./main", ".c", "int\\s+main"));
+            allConfigs.add(new Configuration("C++ Config", "CPP", "g++ *.cpp -o main", "./main", ".cpp", "int\\s+main"));
             allConfigs.add(new Configuration("Java Config", "JAVA", "javac *.java", "java $MAIN", ".java", "public\\s+static\\s+void\\s+main"));
             allConfigs.add(new Configuration("Python Config", "PYTHON", "echo skip", "python3 $MAIN", ".py", "if\\s+__name__\\s*==.*main"));
             allConfigs.add(new Configuration("Haskell Config", "HASKELL", "ghc --make $MAIN -o main", "./main", ".hs", "\\bmain\\s*[:=]"));
