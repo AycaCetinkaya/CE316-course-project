@@ -151,9 +151,16 @@ public class ProjectRunnerService {
         if (items == null) return files;
 
         for (File item : items) {
+            String name = item.getName();
+            if (name.startsWith("._") || name.equals(".DS_Store")) {
+                continue;
+            }
             if (item.isFile()) {
                 files.add(item);
             } else if (item.isDirectory()) {
+                if (name.equals("__MACOSX")) {
+                    continue;
+                }
                 files.addAll(getAllFiles(item));
             }
         }
