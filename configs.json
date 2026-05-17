@@ -1,7 +1,6 @@
 [
   {"name":"C Default","language":"C","compileCommand":"gcc *.c -o main","runCommand":"./main","sourceExtension":".c","entryPointPattern":"int\\s+main\\s*\\("},
   {"name":"Haskell Default","language":"HASKELL","compileCommand":"ghc --make $MAIN -o main","runCommand":"./main","sourceExtension":".hs","entryPointPattern":"\\bmain\\s*[:=]"},
-  {"name":"C++ Default","language":"CPP","compileCommand":"g++ *.cpp -o main","runCommand":"./main","sourceExtension":".cpp","entryPointPattern":"int\\s+main\\s*\\("},
   {"name":"Python Default","language":"PYTHON","compileCommand":"echo skip","runCommand":"python3 $MAIN","sourceExtension":".py","entryPointPattern":"if\\s+__name__\\s*==\\s*[\"']__main__[\"']"},
-  {"name":"Java Default","language":"JAVA","compileCommand":"javac -d . *.java","runCommand":"java -cp . $MAIN","sourceExtension":".java","entryPointPattern":"public\\s+static\\s+void\\s+main"}
+  {"name":"Java Default","language":"JAVA","compileCommand":"javac -d . *.java","runCommand":"java -cp . $MAIN","sourceExtension":".java","entryPointPattern":"public\\s+static\\s+void\\s+main"},
 ]

@@ -2409,10 +2409,13 @@ public class IAEGui extends JFrame {
         table.getTableHeader().setPreferredSize(new Dimension(0, 52));
         table.getTableHeader().setBorder(new MatteBorder(1, 0, 1, 0, BORDER_COLOR));
 
-        JPanel tableHolder = new JPanel(new BorderLayout());
+        JScrollPane tableHolder = new JScrollPane(table);
         tableHolder.setBackground(Color.WHITE);
-        tableHolder.add(table.getTableHeader(), BorderLayout.NORTH);
-        tableHolder.add(table, BorderLayout.CENTER);
+        tableHolder.getViewport().setBackground(Color.WHITE);
+        tableHolder.setBorder(null);
+        tableHolder.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        tableHolder.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        tableHolder.getVerticalScrollBar().setUnitIncrement(16);
 
         JPanel footer = new JPanel(new BorderLayout());
         footer.setBackground(BG_CARD);
