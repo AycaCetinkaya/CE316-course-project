@@ -1357,9 +1357,14 @@ public class IAEGui extends JFrame {
     }
 
     private void refreshConfigPage() {
-        mainContentPanel.add(createConfigurationsPanel(), "CONFIGURATIONS");
-        updateConfigDropdown();
-        cardLayout.show(mainContentPanel, "CONFIGURATIONS");
+        allConfigs = loadConfigurationsFromDb();
+
+        mainContentPanel.removeAll();
+        addPages();
+
+        cardLayout.show(mainContentPanel, "configurations");
+        mainContentPanel.revalidate();
+        mainContentPanel.repaint();
     }
 
     private JButton createStyledButton(String text, boolean primary) {
@@ -1383,9 +1388,22 @@ public class IAEGui extends JFrame {
 
     private void updateConfigDropdown() {
         if (cmbConfiguration == null) return;
+
+        Object previousSelection = cmbConfiguration.getSelectedItem();
+
         cmbConfiguration.removeAllItems();
+        cmbConfiguration.addItem("AUTO");
+
         for (Configuration config : allConfigs) {
             cmbConfiguration.addItem(config.getName());
+        }
+
+        if (previousSelection != null) {
+            cmbConfiguration.setSelectedItem(previousSelection);
+        }
+
+        if (cmbConfiguration.getSelectedItem() == null) {
+            cmbConfiguration.setSelectedItem("AUTO");
         }
     }
 
