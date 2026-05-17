@@ -101,8 +101,7 @@ public class ProjectRunnerService {
     private Configuration autoDetectConfig(File folder) {
         if (folder == null || !folder.exists()) return null;
 
-        ConfigStore store = new ConfigStore();
-        List<Configuration> configs = store.loadAll();
+        List<Configuration> configs = loadConfigurationsFromDb();
         List<File> files = getAllFiles(folder);
 
         for (Configuration config : configs) {
@@ -129,6 +128,20 @@ public class ProjectRunnerService {
         }
 
         return null;
+    }
+
+    private List<Configuration> loadConfigurationsFromDb() {
+        DatabaseManager db = new DatabaseManager();
+        try {
+            db.connect();
+            db.initSchema();
+            return new ArrayList<>(db.getAllConfigurations());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ArrayList<>();
+        } finally {
+            db.disconnect();
+        }
     }
 
     private List<File> getAllFiles(File folder) {

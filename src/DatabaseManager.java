@@ -579,6 +579,14 @@ public class DatabaseManager {
         }
     }
 
+    public void deleteConfigurationByName(String name) throws SQLException {
+        String sql = "DELETE FROM Configurations WHERE name = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, name);
+            ps.executeUpdate();
+        }
+    }
+
     public void deleteProject(long id) throws SQLException {
         // Must delete children first due to foreign keys
         try (PreparedStatement ps = connection.prepareStatement(

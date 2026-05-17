@@ -49,13 +49,15 @@ public class IAEGui extends JFrame {
 
     public IAEGui() {
         this.configStore = new ConfigStore();
-        this.allConfigs = configStore.loadAll();
+        this.allConfigs = loadConfigurationsFromDb();
         if (this.allConfigs.isEmpty()) {
             allConfigs.add(new Configuration("C Config", "C", "gcc *.c -o main", "./main", ".c", "int\\s+main"));
             allConfigs.add(new Configuration("Java Config", "JAVA", "javac *.java", "java $MAIN", ".java", "public\\s+static\\s+void\\s+main"));
             allConfigs.add(new Configuration("Python Config", "PYTHON", "echo skip", "python3 $MAIN", ".py", "if\\s+__name__\\s*==.*main"));
             allConfigs.add(new Configuration("Haskell Config", "HASKELL", "ghc --make $MAIN -o main", "./main", ".hs", "\\bmain\\s*[:=]"));
-            configStore.saveAll(allConfigs);
+            for (Configuration c : allConfigs) {
+                persistConfigurationToDb(c);
+            }
         }
         setTitle("IAE - Integrated Assignment Environment");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -772,40 +774,90 @@ public class IAEGui extends JFrame {
         }
     }
 
-    private void runProject() {
+    private List<Configuration> loadConfigurationsFromDb() {
+        DatabaseManager db = new DatabaseManager();
         try {
-            String projectName = getRealText(txtProjectName, "e.g., Data Structures - Assignment 1");
-            String submissionsPath = getRealText(txtSubmissionsFolder, "Select folder containing ZIP files...");
-
-            String selected = (String) cmbConfiguration.getSelectedItem();
-
-            if (projectName.isEmpty() || submissionsPath.isEmpty() || selected == null) {
-                JOptionPane.showMessageDialog(this, "Please fill project name and submissions folder.");
-                return;
+            db.connect();
+            db.initSchema();
+            List<Configuration> filtered = new ArrayList<>();
+            for (Configuration c : db.getAllConfigurations()) {
+                if (c.getName() != null && !"AUTO".equalsIgnoreCase(c.getName())) {
+                    filtered.add(c);
+                }
             }
-
-            Configuration selectedConfig = getSelectedConfiguration(selected);
-            List<TestCase> testCases = buildTestCasesFromForm();
-
-            ProjectRunnerService runner = new ProjectRunnerService();
-
-            Project project = runner.runProject(
-                    projectName,
-                    new File(submissionsPath),
-                    testCases,
-                    selectedConfig
-            );
-
-            refreshSavedProjects();
-            currentProject = project;
-
-            JOptionPane.showMessageDialog(this, "Project evaluated successfully.");
-            refreshDashboard();
-
+            return filtered;
         } catch (Exception ex) {
             ex.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Evaluation failed: " + ex.getMessage());
+            return new ArrayList<>();
+        } finally {
+            db.disconnect();
         }
+    }
+
+    private void persistConfigurationToDb(Configuration config) {
+        DatabaseManager db = new DatabaseManager();
+        try {
+            db.connect();
+            db.initSchema();
+            db.upsertConfiguration(config);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        } finally {
+            db.disconnect();
+        }
+    }
+
+    private void deleteConfigurationFromDb(String name) {
+        DatabaseManager db = new DatabaseManager();
+        try {
+            db.connect();
+            db.initSchema();
+            db.deleteConfigurationByName(name);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        } finally {
+            db.disconnect();
+        }
+    }
+
+    private void runProject() {
+        final String projectName = getRealText(txtProjectName, "e.g., Data Structures - Assignment 1");
+        final String submissionsPath = getRealText(txtSubmissionsFolder, "Select folder containing ZIP files...");
+        final String selected = (String) cmbConfiguration.getSelectedItem();
+
+        if (projectName.isEmpty() || submissionsPath.isEmpty() || selected == null) {
+            JOptionPane.showMessageDialog(this, "Please fill project name and submissions folder.");
+            return;
+        }
+
+        final Configuration selectedConfig = getSelectedConfiguration(selected);
+        final List<TestCase> testCases;
+        try {
+            testCases = buildTestCasesFromForm();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Failed to read test case files: " + ex.getMessage());
+            return;
+        }
+
+        runEvaluationAsync(
+                "Evaluating submissions, please wait...",
+                () -> {
+                    ProjectRunnerService runner = new ProjectRunnerService();
+                    return runner.runProject(projectName, new File(submissionsPath), testCases, selectedConfig);
+                },
+                project -> {
+                    try {
+                        refreshSavedProjects();
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                    }
+                    currentProject = project;
+                    JOptionPane.showMessageDialog(this, "Project evaluated successfully.");
+                    refreshDashboard();
+                },
+                "Evaluation failed"
+        );
     }
     private Configuration getSelectedConfiguration(String selected) {
         if (selected == null || selected.equals("AUTO")) {
@@ -840,45 +892,106 @@ public class IAEGui extends JFrame {
         int result = chooser.showOpenDialog(this);
         if (result != JFileChooser.APPROVE_OPTION) return;
 
-        File submissionsDir = chooser.getSelectedFile();
+        final File submissionsDir = chooser.getSelectedFile();
+        final String projectName = currentProject.getName();
+        final List<TestCase> testCases = currentProject.getTestCases();
+        final Configuration projectConfig = currentProject.getConfiguration();
 
-        try {
-            ProjectRunnerService runner = new ProjectRunnerService();
-            runner.runProject(
-                    currentProject.getName(),
-                    submissionsDir,
-                    currentProject.getTestCases(),
-                    currentProject.getConfiguration()
-            );
+        runEvaluationAsync(
+                "Re-running '" + projectName + "', please wait...",
+                () -> {
+                    ProjectRunnerService runner = new ProjectRunnerService();
+                    runner.runProject(projectName, submissionsDir, testCases, projectConfig);
 
-            DatabaseManager db = new DatabaseManager();
-            db.connect();
-            List<Project> refreshed = db.getProjects();
-            db.disconnect();
+                    DatabaseManager db = new DatabaseManager();
+                    db.connect();
+                    try {
+                        return db.getProjects();
+                    } finally {
+                        db.disconnect();
+                    }
+                },
+                refreshed -> {
+                    recentProjects.clear();
+                    recentProjects.addAll(refreshed);
 
-            recentProjects.clear();
-            recentProjects.addAll(refreshed);
+                    Project updated = null;
+                    for (Project p : refreshed) {
+                        if (p.getName().equals(projectName)) {
+                            updated = p;
+                            break;
+                        }
+                    }
 
-            Project updated = null;
-            for (Project p : refreshed) {
-                if (p.getName().equals(currentProject.getName())) {
-                    updated = p;
-                    break;
+                    if (updated != null) {
+                        currentProject = updated;
+                        openEvaluationResults(updated);
+                    } else {
+                        refreshDashboard();
+                    }
+
+                    JOptionPane.showMessageDialog(this, "Project re-evaluated successfully.");
+                },
+                "Re-run failed"
+        );
+    }
+
+    private <T> void runEvaluationAsync(String message,
+                                        java.util.concurrent.Callable<T> task,
+                                        java.util.function.Consumer<T> onSuccess,
+                                        String errorTitle) {
+        JDialog progress = new JDialog(this, "Please wait", true);
+        progress.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        progress.setLayout(new BorderLayout(0, 12));
+
+        JLabel label = new JLabel(message, SwingConstants.CENTER);
+        label.setFont(FONT_BODY);
+        label.setBorder(new EmptyBorder(20, 24, 6, 24));
+
+        JProgressBar bar = new JProgressBar();
+        bar.setIndeterminate(true);
+        bar.setBorder(new EmptyBorder(0, 24, 20, 24));
+
+        progress.add(label, BorderLayout.NORTH);
+        progress.add(bar, BorderLayout.CENTER);
+        progress.setSize(420, 120);
+        progress.setLocationRelativeTo(this);
+
+        javax.swing.SwingWorker<T, Void> worker = new javax.swing.SwingWorker<>() {
+            @Override
+            protected T doInBackground() throws Exception {
+                return task.call();
+            }
+
+            @Override
+            protected void done() {
+                progress.dispose();
+                try {
+                    T result = get();
+                    onSuccess.accept(result);
+                } catch (java.util.concurrent.ExecutionException ex) {
+                    Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                    cause.printStackTrace();
+                    JOptionPane.showMessageDialog(
+                            IAEGui.this,
+                            errorTitle + ": " + cause.getMessage(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE
+                    );
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    JOptionPane.showMessageDialog(
+                            IAEGui.this,
+                            errorTitle + ": " + ex.getMessage(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE
+                    );
                 }
             }
+        };
 
-            if (updated != null) {
-                currentProject = updated;
-                openEvaluationResults(updated);
-            } else {
-                refreshDashboard();
-            }
-
-            JOptionPane.showMessageDialog(this, "Project re-evaluated successfully.");
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Re-run failed: " + ex.getMessage());
-        }
+        worker.execute();
+        progress.setVisible(true);
     }
 
     private Language mapLanguage(String selected) {
@@ -954,7 +1067,9 @@ public class IAEGui extends JFrame {
 
                     if (importedConfigs != null && !importedConfigs.isEmpty()) {
                         allConfigs.addAll(importedConfigs);
-                        configStore.saveAll(allConfigs);
+                        for (Configuration imported : importedConfigs) {
+                            persistConfigurationToDb(imported);
+                        }
                         refreshConfigPage();
 
                         JOptionPane.showMessageDialog(this, importedConfigs.size() + " configurations imported.");
@@ -1100,7 +1215,7 @@ public class IAEGui extends JFrame {
                             "Delete configuration: " + currentConfig.getName() + "?", "Confirm", JOptionPane.YES_NO_OPTION);
                     if (confirm == JOptionPane.YES_OPTION) {
                         allConfigs.remove(currentConfig);
-                        configStore.saveAll(allConfigs);
+                        deleteConfigurationFromDb(currentConfig.getName());
                         refreshConfigPage();
                     }
                 }
@@ -1201,9 +1316,14 @@ public class IAEGui extends JFrame {
                     runField.getText(), extField.getText(), patternField.getText()
             );
 
-            if (config != null) allConfigs.remove(config);
+            if (config != null) {
+                allConfigs.remove(config);
+                if (!config.getName().equals(newConfig.getName())) {
+                    deleteConfigurationFromDb(config.getName());
+                }
+            }
             allConfigs.add(newConfig);
-            configStore.saveAll(allConfigs);
+            persistConfigurationToDb(newConfig);
             dialog.dispose();
             refreshConfigPage();
         });
