@@ -36,6 +36,7 @@ public class EvaluationService {
 
         List<PerTestResult> perTestResults = new ArrayList<>();
         Result finalResult = evaluateSubmission(submission, config, testCases, perTestResults);
+
         submission.setResult(finalResult);
         submission.setPerTestResults(perTestResults);
 
@@ -77,6 +78,7 @@ public class EvaluationService {
                         compileResult.getExitCode()
                 ));
             }
+
             return new Result(
                     Status.COMPILE_ERROR,
                     compileResult.getOutput(),
@@ -85,6 +87,9 @@ public class EvaluationService {
         }
 
         StringBuilder allOutputs = new StringBuilder();
+        StringBuilder allErrors = new StringBuilder();
+
+        Status finalStatus = Status.SUCCESS;
 
         for (int i = 0; i < testCases.size(); i++) {
 
@@ -119,14 +124,17 @@ public class EvaluationService {
 
                 allOutputs.append("Output: ")
                         .append(testResult.getOutput())
+                        .append(System.lineSeparator())
                         .append(System.lineSeparator());
 
                 if (testResult.getStatus() != Status.SUCCESS) {
-                    return new Result(
-                            testResult.getStatus(),
-                            allOutputs.toString(),
-                            "Failed at test case " + (i + 1) + ": " + testResult.getErrorMessage()
-                    );
+                    finalStatus = chooseWorseStatus(finalStatus, testResult.getStatus());
+
+                    allErrors.append("Test Case ")
+                            .append(i + 1)
+                            .append(": ")
+                            .append(testResult.getErrorMessage())
+                            .append(System.lineSeparator());
                 }
 
             } catch (EvaluatorException e) {
@@ -137,18 +145,40 @@ public class EvaluationService {
                         e.getMessage(),
                         -1
                 ));
-                return new Result(
-                        Status.RUNTIME_ERROR,
-                        allOutputs.toString(),
-                        "Evaluator run error at test case " + (i + 1) + ": " + e.getMessage()
-                );
+
+                finalStatus = chooseWorseStatus(finalStatus, Status.RUNTIME_ERROR);
+
+                allOutputs.append("Test Case ")
+                        .append(i + 1)
+                        .append(" -> ")
+                        .append(Status.RUNTIME_ERROR)
+                        .append(System.lineSeparator())
+                        .append(System.lineSeparator());
+
+                allErrors.append("Evaluator run error at test case ")
+                        .append(i + 1)
+                        .append(": ")
+                        .append(e.getMessage())
+                        .append(System.lineSeparator());
             }
         }
 
         return new Result(
-                Status.SUCCESS,
+                finalStatus,
                 allOutputs.toString(),
-                ""
+                allErrors.toString()
         );
+    }
+
+    private Status chooseWorseStatus(Status current, Status candidate) {
+        if (candidate == Status.RUNTIME_ERROR) {
+            return Status.RUNTIME_ERROR;
+        }
+
+        if (candidate == Status.WRONG_OUTPUT && current == Status.SUCCESS) {
+            return Status.WRONG_OUTPUT;
+        }
+
+        return current;
     }
 }
