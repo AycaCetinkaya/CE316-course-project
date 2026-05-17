@@ -1208,9 +1208,16 @@ public class IAEGui extends JFrame {
             refreshConfigPage();
         });
 
-        dialog.add(formPanel, BorderLayout.CENTER);
+        JScrollPane formScroll = new JScrollPane(formPanel);
+        formScroll.setBorder(null);
+        formScroll.getVerticalScrollBar().setUnitIncrement(16);
+        formScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        formScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+
+        dialog.add(formScroll, BorderLayout.CENTER);
         dialog.add(btnSave, BorderLayout.SOUTH);
         dialog.pack();
+        dialog.setSize(new Dimension(520, Math.min(dialog.getHeight() + 40, 520)));
         dialog.setLocationRelativeTo(null);
         dialog.setVisible(true);
     }
@@ -2060,8 +2067,15 @@ public class IAEGui extends JFrame {
             }
         }
 
+        JScrollPane scrollPane = new JScrollPane(list);
+        scrollPane.setBorder(null);
+        scrollPane.getViewport().setBackground(BG_CARD);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+
         card.add(title, BorderLayout.NORTH);
-        card.add(list, BorderLayout.CENTER);
+        card.add(scrollPane, BorderLayout.CENTER);
         return card;
     }
 
@@ -2137,14 +2151,19 @@ public class IAEGui extends JFrame {
         area.setBorder(new EmptyBorder(14, 16, 14, 16));
         area.setLineWrap(true);
         area.setWrapStyleWord(true);
+        area.setCaretPosition(0);
 
-        int lines = area.getLineCount();
-        int height = Math.max(80, lines * 18 + 20);
-        area.setPreferredSize(new Dimension(1000, height));
+        JScrollPane scrollPane = new JScrollPane(area);
+        scrollPane.setBorder(null);
+        scrollPane.getViewport().setBackground(new Color(30, 41, 59));
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
         JPanel wrapper = new JPanel(new BorderLayout());
         wrapper.setBackground(new Color(30, 41, 59));
-        wrapper.add(area, BorderLayout.CENTER);
+        wrapper.add(scrollPane, BorderLayout.CENTER);
+        wrapper.setPreferredSize(new Dimension(1000, 220));
 
         card.add(title, BorderLayout.NORTH);
         card.add(wrapper, BorderLayout.CENTER);
