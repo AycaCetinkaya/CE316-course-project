@@ -56,36 +56,58 @@ public class ZipService {
         File zipFile = submission.getZipFile();
         File destinationDir = submission.getExtractedFolder();
 
+        if (zipFile == null || !zipFile.exists() || !zipFile.isFile()) {
+            throw new ZipServiceException("ZIP file does not exist.");
+        }
+
+        if (!zipFile.getName().toLowerCase().endsWith(".zip")) {
+            throw new ZipServiceException("File is not a ZIP archive: " + zipFile.getName());
+        }
+
         if (destinationDir == null) {
             throw new ZipServiceException("No extraction destination set for student: " + submission.getStudentId());
         }
 
-        if (!destinationDir.exists() && !destinationDir.mkdirs()) {
-            throw new ZipServiceException("Cannot create directory: " + destinationDir.getAbsolutePath());
+        try {
+            if (destinationDir.exists()) {
+                deleteRecursively(destinationDir.toPath());
+            }
+
+            if (!destinationDir.mkdirs()) {
+                throw new ZipServiceException("Cannot create directory: " + destinationDir.getAbsolutePath());
+            }
+        } catch (IOException e) {
+            throw new ZipServiceException("Cannot prepare extraction folder: " + e.getMessage(), e);
         }
 
         Path destPath = destinationDir.toPath().toAbsolutePath().normalize();
+        int extractedFileCount = 0;
 
         try (ZipFile zip = new ZipFile(zipFile)) {
-
             Enumeration<? extends ZipEntry> entries = zip.entries();
 
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
 
+                String entryName = entry.getName().replace('\\', '/');
+
+                if (shouldSkipZipEntry(entryName)) {
+                    continue;
+                }
+
                 String cleanedName = removeOuterStudentFolder(
-                        entry.getName(),
+                        entryName,
                         submission.getStudentId()
                 );
 
-                if (cleanedName.isEmpty()) {
+                if (cleanedName.isEmpty() || shouldSkipZipEntry(cleanedName)) {
                     continue;
                 }
 
                 Path targetPath = destPath.resolve(cleanedName).normalize();
 
                 if (!targetPath.startsWith(destPath)) {
-                    continue;
+                    throw new ZipServiceException("Unsafe ZIP entry skipped: " + entryName);
                 }
 
                 if (entry.isDirectory()) {
@@ -95,10 +117,17 @@ public class ZipService {
 
                     try (InputStream is = zip.getInputStream(entry)) {
                         Files.copy(is, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                        extractedFileCount++;
                     }
                 }
             }
 
+            if (extractedFileCount == 0) {
+                throw new ZipServiceException("ZIP archive is empty or contains only ignored system files.");
+            }
+
+        } catch (ZipException e) {
+            throw new ZipServiceException("Corrupt or invalid ZIP file: " + zipFile.getName(), e);
         } catch (IOException e) {
             throw new ZipServiceException(
                     "Failed to extract " + zipFile.getName() + ": " + e.getMessage(),
@@ -154,5 +183,23 @@ public class ZipService {
         }
 
         return entryName;
+    }
+    private boolean shouldSkipZipEntry(String entryName) {
+        if (entryName == null || entryName.isBlank()) {
+            return true;
+        }
+
+        String normalized = entryName.replace('\\', '/');
+        String fileName = normalized;
+
+        int slashIndex = normalized.lastIndexOf('/');
+        if (slashIndex >= 0) {
+            fileName = normalized.substring(slashIndex + 1);
+        }
+
+        return normalized.startsWith("__MACOSX/")
+                || normalized.contains("/__MACOSX/")
+                || fileName.equals(".DS_Store")
+                || fileName.startsWith("._");
     }
 }

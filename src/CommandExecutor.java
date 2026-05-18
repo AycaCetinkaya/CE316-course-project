@@ -1,6 +1,8 @@
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class CommandExecutor {
@@ -84,41 +86,79 @@ public class CommandExecutor {
     }
 
     private String platformizeCommand(String command, File workingDirectory) {
-        if (command == null) return command;
+        if (command == null) return "";
+
+        command = expandWildcard(command, workingDirectory, "*.java");
+        command = expandWildcard(command, workingDirectory, "*.c");
+        command = expandWildcard(command, workingDirectory, "*.cpp");
 
         if (isWindows()) {
-            command = command.replaceAll("(?<![A-Za-z0-9_])\\./([A-Za-z0-9_.-]+)", "$1.exe");
+            // Windows-specific fixes
             command = command.replaceAll("\\bpython3\\b", "python");
-
-            command = expandWildcard(command, workingDirectory, "*.c");
-            command = expandWildcard(command, workingDirectory, "*.cpp");
-            command = expandWildcard(command, workingDirectory, "*.java");
+            command = command.replaceAll("(?<![A-Za-z0-9_./\\\\-])\\./([A-Za-z0-9_.-]+)", "$1.exe");
         }
 
         return command;
     }
 
     private String expandWildcard(String command, File workingDirectory, String wildcard) {
-        if (!command.contains(wildcard)) {
+        if (command == null || !command.contains(wildcard)) {
             return command;
         }
 
-        String extension = wildcard.substring(1); // .c, .cpp, .java
+        String extension = wildcard.substring(1).toLowerCase();
 
-        File[] files = workingDirectory.listFiles((dir, name) ->
-                name.toLowerCase().endsWith(extension.toLowerCase())
-        );
+        List<File> matchingFiles = findFilesByExtension(workingDirectory, extension);
 
-        if (files == null || files.length == 0) {
+        if (matchingFiles.isEmpty()) {
             return command;
         }
 
-        StringBuilder fileNames = new StringBuilder();
+        StringBuilder expanded = new StringBuilder();
 
-        for (File file : files) {
-            fileNames.append("\"").append(file.getName()).append("\"").append(" ");
+        for (File file : matchingFiles) {
+            String relativePath = workingDirectory.toPath()
+                    .toAbsolutePath()
+                    .normalize()
+                    .relativize(file.toPath().toAbsolutePath().normalize())
+                    .toString();
+
+            expanded.append("\"")
+                    .append(relativePath)
+                    .append("\"")
+                    .append(" ");
         }
 
-        return command.replace(wildcard, fileNames.toString().trim());
+        return command.replace(wildcard, expanded.toString().trim());
+    }
+
+    private List<File> findFilesByExtension(File folder, String extension) {
+        List<File> files = new ArrayList<>();
+
+        if (folder == null || !folder.exists()) {
+            return files;
+        }
+
+        File[] children = folder.listFiles();
+
+        if (children == null) {
+            return files;
+        }
+
+        for (File child : children) {
+            String name = child.getName();
+
+            if (name.equals("__MACOSX") || name.equals(".DS_Store") || name.startsWith("._")) {
+                continue;
+            }
+
+            if (child.isDirectory()) {
+                files.addAll(findFilesByExtension(child, extension));
+            } else if (child.isFile() && name.toLowerCase().endsWith(extension)) {
+                files.add(child);
+            }
+        }
+
+        return files;
     }
 }

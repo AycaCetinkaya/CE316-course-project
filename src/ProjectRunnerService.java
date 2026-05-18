@@ -3,11 +3,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ProjectRunnerService {
+    public interface ProgressListener {
+        void onProgress(int current, int total, String studentId);
+    }
 
     public Project runProject(String projectName,
                               File submissionsDir,
                               List<TestCase> testCases,
                               Configuration selectedConfig) throws ZipServiceException {
+        return runProject(projectName, submissionsDir, testCases, selectedConfig, null);
+    }
+
+    public Project runProject(String projectName,
+                              File submissionsDir,
+                              List<TestCase> testCases,
+                              Configuration selectedConfig,
+                              ProgressListener progressListener) throws ZipServiceException {
 
         DatabaseManager db = new DatabaseManager();
         long projectId = -1;
@@ -30,7 +41,17 @@ public class ProjectRunnerService {
         EvaluationService evaluationService = new EvaluationService();
 
         try {
-            for (StudentZipSubmission submission : submissions) {
+            for (int i = 0; i < submissions.size(); i++) {
+                StudentZipSubmission submission = submissions.get(i);
+
+                if (Thread.currentThread().isInterrupted()) {
+                    break;
+                }
+
+                if (progressListener != null) {
+                    progressListener.onProgress(i + 1, submissions.size(), submission.getStudentId());
+                }
+
                 if (submission.getResult() != null &&
                         submission.getResult().getStatus() == Status.EXTRACTION_ERROR) {
                     persistSubmission(db, projectId, submission);
@@ -67,7 +88,6 @@ public class ProjectRunnerService {
                         config.getSourceExtension(),
                         config.getEntryPointPattern()
                 );
-
 
                 evaluationService.evaluate(submission, studentConfig, testCases);
 
@@ -168,15 +188,33 @@ public class ProjectRunnerService {
         return files;
     }
 
-    private String javaFullyQualifiedName(File file, String content) {
+    private String javaRunToken(File folder, File file, String content) {
         String className = file.getName().replace(".java", "");
+
+        String relativeParent = folder.toPath()
+                .toAbsolutePath()
+                .normalize()
+                .relativize(file.getParentFile().toPath().toAbsolutePath().normalize())
+                .toString()
+                .replace(File.separatorChar, '/');
+
         java.util.regex.Matcher m = java.util.regex.Pattern
                 .compile("(?m)^\\s*package\\s+([a-zA-Z_][\\w.]*)\\s*;")
                 .matcher(content);
+
         if (m.find()) {
-            return m.group(1) + "." + className;
+            String packageName = m.group(1);
+            if (relativeParent.isBlank()) {
+                return packageName + "." + className;
+            }
+            return "-cp \"" + relativeParent + "\" " + packageName + "." + className;
         }
-        return className;
+
+        if (relativeParent.isBlank()) {
+            return className;
+        }
+
+        return "-cp \"" + relativeParent + "\" " + className;
     }
 
     private String findMainFileNameByConfig(File folder, Configuration config) {
@@ -220,7 +258,7 @@ public class ProjectRunnerService {
         if (language.equalsIgnoreCase("JAVA")) {
             try {
                 String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
-                return javaFullyQualifiedName(file, content);
+                return javaRunToken(folder, file, content);
             } catch (Exception e) {
                 return file.getName().replace(".java", "");
             }

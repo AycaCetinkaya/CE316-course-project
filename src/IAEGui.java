@@ -53,6 +53,7 @@ public class IAEGui extends JFrame {
     private final int resultsPerPage = 8;
     private int recentProjectsPage = 1;
     private final int recentProjectsPerPage = 5;
+    private volatile java.util.function.Consumer<String> evaluationProgressUpdater;
 
     public IAEGui() {
         this.configStore = new ConfigStore();
@@ -960,7 +961,19 @@ public class IAEGui extends JFrame {
                 "Evaluating submissions, please wait...",
                 () -> {
                     ProjectRunnerService runner = new ProjectRunnerService();
-                    return runner.runProject(projectName, new File(submissionsPath), testCases, selectedConfig);
+                    return runner.runProject(
+                            projectName,
+                            new File(submissionsPath),
+                            testCases,
+                            selectedConfig,
+                            (current, total, studentId) -> {
+                                if (evaluationProgressUpdater != null) {
+                                    evaluationProgressUpdater.accept(
+                                            "Evaluating " + current + " / " + total + " - Student: " + studentId
+                                    );
+                                }
+                            }
+                    );
                 },
                 project -> {
                     try {
@@ -1068,11 +1081,19 @@ public class IAEGui extends JFrame {
 
         JProgressBar bar = new JProgressBar();
         bar.setIndeterminate(true);
-        bar.setBorder(new EmptyBorder(0, 24, 20, 24));
+        bar.setBorder(new EmptyBorder(0, 24, 8, 24));
+
+        JButton cancelButton = createSecondaryButton("Cancel");
+
+        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        bottomPanel.setBackground(BG_CARD);
+        bottomPanel.setBorder(new EmptyBorder(0, 24, 14, 24));
+        bottomPanel.add(cancelButton);
 
         progress.add(label, BorderLayout.NORTH);
         progress.add(bar, BorderLayout.CENTER);
-        progress.setSize(420, 120);
+        progress.add(bottomPanel, BorderLayout.SOUTH);
+        progress.setSize(440, 165);
         progress.setLocationRelativeTo(this);
 
         javax.swing.SwingWorker<T, Void> worker = new javax.swing.SwingWorker<>() {
@@ -1083,10 +1104,29 @@ public class IAEGui extends JFrame {
 
             @Override
             protected void done() {
+                evaluationProgressUpdater = null;
                 progress.dispose();
+
+                if (isCancelled()) {
+                    JOptionPane.showMessageDialog(
+                            IAEGui.this,
+                            "Evaluation was cancelled.",
+                            "Cancelled",
+                            JOptionPane.INFORMATION_MESSAGE
+                    );
+                    return;
+                }
+
                 try {
                     T result = get();
                     onSuccess.accept(result);
+                } catch (java.util.concurrent.CancellationException ex) {
+                    JOptionPane.showMessageDialog(
+                            IAEGui.this,
+                            "Evaluation was cancelled.",
+                            "Cancelled",
+                            JOptionPane.INFORMATION_MESSAGE
+                    );
                 } catch (java.util.concurrent.ExecutionException ex) {
                     Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
                     cause.printStackTrace();
@@ -1108,6 +1148,13 @@ public class IAEGui extends JFrame {
             }
         };
 
+        cancelButton.addActionListener(e -> {
+            cancelButton.setEnabled(false);
+            label.setText("Cancelling evaluation...");
+            worker.cancel(true);
+        });
+        evaluationProgressUpdater = text ->
+                SwingUtilities.invokeLater(() -> label.setText(text));
         worker.execute();
         progress.setVisible(true);
     }
