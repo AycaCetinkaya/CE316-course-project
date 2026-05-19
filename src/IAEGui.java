@@ -75,6 +75,8 @@ public class IAEGui extends JFrame {
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
+        setJMenuBar(createMenuBar());
+
         add(createSidebar(), BorderLayout.WEST);
 
         JPanel rightArea = new JPanel(new BorderLayout());
@@ -170,6 +172,262 @@ public class IAEGui extends JFrame {
         sidebar.add(menuPanel, BorderLayout.CENTER);
         sidebar.add(footer, BorderLayout.SOUTH);
         return sidebar;
+    }
+
+    private JMenuBar createMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+
+        JMenu fileMenu = new JMenu("File");
+        fileMenu.setMnemonic('F');
+
+        JMenuItem openItem = new JMenuItem("Open Project...");
+        openItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O,
+                Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
+        openItem.addActionListener(e -> openProjectFromFile());
+
+        JMenuItem saveAsItem = new JMenuItem("Save Project As...");
+        saveAsItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S,
+                Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()
+                        | InputEvent.SHIFT_DOWN_MASK));
+        saveAsItem.addActionListener(e -> saveProjectAs());
+
+        JMenuItem exitItem = new JMenuItem("Exit");
+        exitItem.addActionListener(e -> dispose());
+
+        fileMenu.add(openItem);
+        fileMenu.add(saveAsItem);
+        fileMenu.addSeparator();
+        fileMenu.add(exitItem);
+
+        menuBar.add(fileMenu);
+        return menuBar;
+    }
+
+    private Project pickProjectForExport() {
+        List<Project> options = new ArrayList<>();
+        if (currentProject != null) options.add(currentProject);
+        for (Project p : recentProjects) {
+            if (!options.contains(p)) options.add(p);
+        }
+
+        if (options.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "There are no projects to save.\nCreate or open a project first.",
+                    "Nothing to save",
+                    JOptionPane.INFORMATION_MESSAGE);
+            return null;
+        }
+
+        if (options.size() == 1) return options.get(0);
+
+        String[] names = new String[options.size()];
+        for (int i = 0; i < options.size(); i++) names[i] = options.get(i).getName();
+        String selected = (String) JOptionPane.showInputDialog(
+                this,
+                "Which project do you want to save?",
+                "Save Project As",
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                names,
+                names[0]
+        );
+        if (selected == null) return null;
+        for (Project p : options) {
+            if (p.getName().equals(selected)) return p;
+        }
+        return null;
+    }
+
+    private void saveProjectAs() {
+        Project project = pickProjectForExport();
+        if (project == null) return;
+
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Save Project As");
+        chooser.setFileFilter(new FileNameExtensionFilter(
+                "IAE Project Bundle (*." + ProjectStore.FILE_EXTENSION + ")",
+                ProjectStore.FILE_EXTENSION));
+        chooser.setSelectedFile(new File(sanitizeFileName(project.getName())
+                + "." + ProjectStore.FILE_EXTENSION));
+
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+
+        File target = chooser.getSelectedFile();
+        if (!target.getName().toLowerCase().endsWith("." + ProjectStore.FILE_EXTENSION)) {
+            target = new File(target.getParentFile(),
+                    target.getName() + "." + ProjectStore.FILE_EXTENSION);
+        }
+
+        if (target.exists()) {
+            int confirm = JOptionPane.showConfirmDialog(
+                    this,
+                    "File already exists:\n" + target.getAbsolutePath() + "\n\nOverwrite?",
+                    "Confirm Overwrite",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE
+            );
+            if (confirm != JOptionPane.YES_OPTION) return;
+        }
+
+        ProjectFilePaths paths = getProjectPaths(project);
+        try {
+            new ProjectStore().saveTo(target, project,
+                    paths.inputFilePath,
+                    paths.expectedOutputFilePath,
+                    paths.submissionsFolderPath);
+            JOptionPane.showMessageDialog(this,
+                    "Project saved to:\n" + target.getAbsolutePath(),
+                    "Project Saved",
+                    JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this,
+                    "Save failed: " + ex.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void openProjectFromFile() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Open Project");
+        chooser.setFileFilter(new FileNameExtensionFilter(
+                "IAE Project Bundle (*." + ProjectStore.FILE_EXTENSION + ")",
+                ProjectStore.FILE_EXTENSION));
+
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+
+        File source = chooser.getSelectedFile();
+        try {
+            ProjectStore.Bundle bundle = new ProjectStore().loadFrom(source);
+            importBundle(bundle);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this,
+                    "Open failed: " + ex.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void importBundle(ProjectStore.Bundle bundle) {
+        Project bundleProject = bundle.project;
+        String desiredName = bundleProject.getName();
+
+        DatabaseManager db = new DatabaseManager();
+        try {
+            db.connect();
+            db.initSchema();
+
+            long existingId = db.findProjectIdByName(desiredName);
+            String finalName = desiredName;
+
+            if (existingId > 0) {
+                String[] options = {"Overwrite", "Rename", "Skip"};
+                int choice = JOptionPane.showOptionDialog(
+                        this,
+                        "A project named '" + desiredName + "' already exists.\n" +
+                                "What would you like to do?",
+                        "Project Name Conflict",
+                        JOptionPane.YES_NO_CANCEL_OPTION,
+                        JOptionPane.QUESTION_MESSAGE,
+                        null,
+                        options,
+                        options[1]
+                );
+
+                if (choice == JOptionPane.CLOSED_OPTION || choice == 2) {
+                    return;
+                }
+
+                if (choice == 1) {
+                    String suggested = makeUniqueName(db, desiredName);
+                    String input = (String) JOptionPane.showInputDialog(
+                            this,
+                            "Enter a new name for the imported project:",
+                            "Rename Imported Project",
+                            JOptionPane.PLAIN_MESSAGE,
+                            null,
+                            null,
+                            suggested
+                    );
+                    if (input == null || input.trim().isEmpty()) return;
+                    finalName = input.trim();
+                    if (db.findProjectIdByName(finalName) > 0) {
+                        JOptionPane.showMessageDialog(this,
+                                "Name '" + finalName + "' is also in use. Import cancelled.",
+                                "Name Conflict",
+                                JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                } else {
+                    db.deleteProject(existingId);
+                }
+            }
+
+            persistConfigurationToDb(bundleProject.getConfiguration());
+
+            long projectId = db.saveProject(
+                    finalName,
+                    bundleProject.getConfiguration(),
+                    bundleProject.getTestCases()
+            );
+
+            List<TestCase> savedTestCases = db.getTestCasesForProject(projectId);
+
+            for (StudentZipSubmission sub : bundleProject.getSubmissions()) {
+                long subId = db.upsertSubmission(projectId, sub);
+
+                List<PerTestResult> remapped = new ArrayList<>();
+                for (PerTestResult ptr : sub.getPerTestResults()) {
+                    int idx = (int) ptr.getTestCaseId();
+                    if (idx < 0 || idx >= savedTestCases.size()) continue;
+
+                    remapped.add(new PerTestResult(
+                            savedTestCases.get(idx).getId(),
+                            ptr.getStatus(),
+                            ptr.getActualOutput(),
+                            ptr.getErrorMessage(),
+                            ptr.getExitCode()
+                    ));
+                }
+                db.replaceDetailedResults(subId, remapped);
+                sub.setPerTestResults(remapped);
+            }
+
+            if (bundleProject.getLastModified() > 0) {
+                db.touchProject(projectId);
+            }
+
+            rememberProjectPaths(finalName,
+                    bundle.inputFilePath,
+                    bundle.expectedOutputFilePath,
+                    bundle.submissionsFolderPath);
+
+            refreshSavedProjects();
+            JOptionPane.showMessageDialog(this,
+                    "Project imported as '" + finalName + "'.",
+                    "Project Imported",
+                    JOptionPane.INFORMATION_MESSAGE);
+            refreshDashboard();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this,
+                    "Import failed: " + ex.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+        } finally {
+            db.disconnect();
+        }
+    }
+
+    private String makeUniqueName(DatabaseManager db, String base) throws java.sql.SQLException {
+        if (db.findProjectIdByName(base) <= 0) return base;
+        for (int i = 2; i < 1000; i++) {
+            String candidate = base + " (" + i + ")";
+            if (db.findProjectIdByName(candidate) <= 0) return candidate;
+        }
+        return base + " (" + System.currentTimeMillis() + ")";
     }
 
     private JPanel createTopBar(String title) {
@@ -474,11 +732,13 @@ public class IAEGui extends JFrame {
                 return;
             }
 
-            List<Project> orderedProjects = new ArrayList<>();
-
-            for (int i = recentProjects.size() - 1; i >= 0; i--) {
-                orderedProjects.add(recentProjects.get(i));
-            }
+            List<Project> orderedProjects = new ArrayList<>(recentProjects);
+            orderedProjects.sort((a, b) -> {
+                long la = a.getLastModified();
+                long lb = b.getLastModified();
+                if (la != lb) return Long.compare(lb, la);
+                return Long.compare(b.getId(), a.getId());
+            });
 
             int totalRows = orderedProjects.size();
             int totalPages = Math.max(1, (int) Math.ceil(totalRows / (double) recentProjectsPerPage));
@@ -546,16 +806,19 @@ public class IAEGui extends JFrame {
                 "Completed"
         );
 
+        JButton renameButton = createProjectRenameButton(project);
         JButton deleteButton = createProjectDeleteButton(project);
         JPanel rightBox = (JPanel) row.getClientProperty("rightBox");
         if (rightBox != null) {
+            rightBox.add(renameButton);
             rightBox.add(deleteButton);
         }
 
         row.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (SwingUtilities.isDescendingFrom(e.getComponent(), deleteButton)) {
+                if (SwingUtilities.isDescendingFrom(e.getComponent(), deleteButton)
+                        || SwingUtilities.isDescendingFrom(e.getComponent(), renameButton)) {
                     return;
                 }
                 openEvaluationResults(project);
@@ -563,6 +826,85 @@ public class IAEGui extends JFrame {
         });
 
         return row;
+    }
+
+    private JButton createProjectRenameButton(Project project) {
+        JButton button = new JButton("Rename");
+        button.setFont(new Font("SansSerif", Font.BOLD, 11));
+        button.setForeground(new Color(19, 99, 128));
+        button.setBackground(new Color(236, 246, 252));
+        button.setBorder(new LineBorder(new Color(186, 213, 234), 1, true));
+        button.setFocusPainted(false);
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        button.setPreferredSize(new Dimension(82, 30));
+
+        button.addActionListener(e -> renameProject(project));
+        return button;
+    }
+
+    private void renameProject(Project project) {
+        String oldName = project.getName();
+        String input = (String) JOptionPane.showInputDialog(
+                this,
+                "Enter a new name for the project:",
+                "Rename Project",
+                JOptionPane.PLAIN_MESSAGE,
+                null,
+                null,
+                oldName
+        );
+        if (input == null) return;
+        String newName = input.trim();
+        if (newName.isEmpty() || newName.equals(oldName)) return;
+
+        try {
+            DatabaseManager db = new DatabaseManager();
+            try {
+                db.connect();
+                db.initSchema();
+
+                long projectId = project.getId() > 0
+                        ? project.getId()
+                        : db.findProjectIdByName(oldName);
+                if (projectId <= 0) {
+                    JOptionPane.showMessageDialog(this,
+                            "Could not locate project '" + oldName + "'.",
+                            "Rename Failed",
+                            JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                if (db.findProjectIdByName(newName) > 0) {
+                    JOptionPane.showMessageDialog(this,
+                            "A project named '" + newName + "' already exists.",
+                            "Name Conflict",
+                            JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                db.renameProject(projectId, newName);
+            } finally {
+                db.disconnect();
+            }
+
+            ProjectFilePaths paths = projectPathsByName.remove(oldName);
+            if (paths != null) {
+                projectPathsByName.put(newName, paths);
+            }
+            project.setName(newName);
+            if (currentProject != null && currentProject.getName().equals(oldName)) {
+                currentProject.setName(newName);
+            }
+
+            refreshSavedProjects();
+            refreshDashboard();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this,
+                    "Rename failed: " + ex.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private JPanel createProjectRow(String name, String students, String passed, String failed, String status) {

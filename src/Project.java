@@ -6,6 +6,7 @@ public class Project {
     private Configuration configuration;
     private List<StudentZipSubmission> submissions;
     private List<TestCase> testCases;
+    private long lastModified;
 
     public Project(String name, Configuration configuration,
                    List<StudentZipSubmission> submissions,
@@ -15,6 +16,7 @@ public class Project {
         this.configuration = configuration;
         this.submissions = submissions;
         this.testCases = testCases;
+        this.lastModified = 0L;
     }
 
     public String getName() { return name; }
@@ -23,4 +25,7 @@ public class Project {
     public List<TestCase> getTestCases() { return testCases; }
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
+    public long getLastModified() { return lastModified; }
+    public void setLastModified(long lastModified) { this.lastModified = lastModified; }
+    public void setName(String name) { this.name = name; }
 }

@@ -54,9 +54,10 @@ public class DatabaseManager {
             """,
                 """
             CREATE TABLE IF NOT EXISTS Projects (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                name      TEXT    NOT NULL UNIQUE,
-                config_id INTEGER NOT NULL,
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                name          TEXT    NOT NULL UNIQUE,
+                config_id     INTEGER NOT NULL,
+                last_modified INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (config_id) REFERENCES Configurations(id)
             )
             """,
@@ -105,6 +106,11 @@ public class DatabaseManager {
 
         migrateConfigurationColumns();
         migrateDetailedResultColumns();
+        migrateProjectColumns();
+    }
+
+    private void migrateProjectColumns() throws SQLException {
+        addColumnIfMissing("Projects", "last_modified", "INTEGER NOT NULL DEFAULT 0");
     }
 
     private void migrateConfigurationColumns() throws SQLException {
@@ -198,10 +204,11 @@ public class DatabaseManager {
     //Projects
 
     public long insertProject(String name, long configId) throws SQLException {
-        String sql = "INSERT INTO Projects (name, config_id) VALUES (?, ?)";
+        String sql = "INSERT INTO Projects (name, config_id, last_modified) VALUES (?, ?, ?)";
         try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, name);
             ps.setLong(2, configId);
+            ps.setLong(3, System.currentTimeMillis());
             ps.executeUpdate();
             ResultSet keys = ps.getGeneratedKeys();
             return keys.next() ? keys.getLong(1) : -1;
@@ -215,16 +222,36 @@ public class DatabaseManager {
             ResultSet rs = ps.executeQuery();
             if (rs.next()) {
                 long existingId = rs.getLong("id");
-                String updateSql = "UPDATE Projects SET config_id = ? WHERE id = ?";
+                String updateSql = "UPDATE Projects SET config_id = ?, last_modified = ? WHERE id = ?";
                 try (PreparedStatement ups = connection.prepareStatement(updateSql)) {
                     ups.setLong(1, configId);
-                    ups.setLong(2, existingId);
+                    ups.setLong(2, System.currentTimeMillis());
+                    ups.setLong(3, existingId);
                     ups.executeUpdate();
                 }
                 return existingId;
             }
         }
         return insertProject(name, configId);
+    }
+
+    public void touchProject(long projectId) throws SQLException {
+        String sql = "UPDATE Projects SET last_modified = ? WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, System.currentTimeMillis());
+            ps.setLong(2, projectId);
+            ps.executeUpdate();
+        }
+    }
+
+    public void renameProject(long projectId, String newName) throws SQLException {
+        String sql = "UPDATE Projects SET name = ?, last_modified = ? WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, newName);
+            ps.setLong(2, System.currentTimeMillis());
+            ps.setLong(3, projectId);
+            ps.executeUpdate();
+        }
     }
 
     public long findProjectIdByName(String name) throws SQLException {
@@ -476,7 +503,7 @@ public class DatabaseManager {
         List<Project> projects = new ArrayList<>();
 
         String sql = """
-        SELECT p.id, p.name, c.name AS config_name, c.language,
+        SELECT p.id, p.name, p.last_modified, c.name AS config_name, c.language,
                c.compile_command, c.run_command, c.source_extension, c.entry_point_pattern
         FROM Projects p
         JOIN Configurations c ON p.config_id = c.id
@@ -503,6 +530,7 @@ public class DatabaseManager {
 
                 Project project = new Project(projectName, config, submissions, testCases);
                 project.setId(projectId);
+                project.setLastModified(rs.getLong("last_modified"));
                 projects.add(project);
             }
         }
