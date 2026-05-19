@@ -2818,8 +2818,8 @@ public class IAEGui extends JFrame {
 
         try {
             String content = "json".equals(format)
-                    ? buildResultsJson(currentProject)
-                    : buildResultsCsv(currentProject);
+                    ? ResultsExporter.toJson(currentProject)
+                    : ResultsExporter.toCsv(currentProject);
             Files.writeString(saveFile.toPath(), content, StandardCharsets.UTF_8);
             JOptionPane.showMessageDialog(this, "Results exported successfully to:\n" + saveFile.getAbsolutePath());
         } catch (IOException ex) {
@@ -2847,125 +2847,6 @@ public class IAEGui extends JFrame {
         if (value == null || value.isBlank()) return "evaluation";
         String sanitized = value.replaceAll("[\\\\/:*?\"<>|]+", "_").trim();
         return sanitized.isEmpty() ? "evaluation" : sanitized;
-    }
-
-    private String buildResultsCsv(Project project) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("project,student_id,final_status,compile_status,run_status,output_status,status,zip_file,extracted_folder,output,error_message,test_count,passed_tests,failed_tests\n");
-
-        for (StudentZipSubmission submission : project.getSubmissions()) {
-            Result result = submission.getResult();
-            Status status = result == null ? null : result.getStatus();
-            List<PerTestResult> perTestResults = submission.getPerTestResults();
-            int passedTests = 0;
-            for (PerTestResult perTestResult : perTestResults) {
-                if (perTestResult.getStatus() == Status.SUCCESS) {
-                    passedTests++;
-                }
-            }
-
-            appendCsvRow(sb,
-                    project.getName(),
-                    submission.getStudentId(),
-                    getFinalStatus(status),
-                    getCompileStatus(status),
-                    getRunStatus(status),
-                    getOutputStatus(status),
-                    status == null ? "PENDING" : status.name(),
-                    submission.getZipFile() == null ? "" : submission.getZipFile().getAbsolutePath(),
-                    submission.getExtractedFolder() == null ? "" : submission.getExtractedFolder().getAbsolutePath(),
-                    result == null ? "" : result.getOutput(),
-                    result == null ? "" : result.getErrorMessage(),
-                    String.valueOf(perTestResults.size()),
-                    String.valueOf(passedTests),
-                    String.valueOf(perTestResults.size() - passedTests)
-            );
-        }
-
-        return sb.toString();
-    }
-
-    private void appendCsvRow(StringBuilder sb, String... values) {
-        for (int i = 0; i < values.length; i++) {
-            if (i > 0) sb.append(',');
-            sb.append(csvValue(values[i]));
-        }
-        sb.append('\n');
-    }
-
-    private String csvValue(String value) {
-        if (value == null) return "";
-        boolean mustQuote = value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r");
-        String escaped = value.replace("\"", "\"\"");
-        return mustQuote ? "\"" + escaped + "\"" : escaped;
-    }
-
-    private String buildResultsJson(Project project) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\n");
-        sb.append("  \"project\": ").append(JsonUtil.encodeString(project.getName())).append(",\n");
-        sb.append("  \"submissions\": [\n");
-
-        List<StudentZipSubmission> submissions = project.getSubmissions();
-        for (int i = 0; i < submissions.size(); i++) {
-            StudentZipSubmission submission = submissions.get(i);
-            Result result = submission.getResult();
-            Status status = result == null ? null : result.getStatus();
-
-            sb.append("    {\n");
-            appendJsonField(sb, "student_id", submission.getStudentId(), 6, true);
-            appendJsonField(sb, "final_status", getFinalStatus(status), 6, true);
-            appendJsonField(sb, "compile_status", getCompileStatus(status), 6, true);
-            appendJsonField(sb, "run_status", getRunStatus(status), 6, true);
-            appendJsonField(sb, "output_status", getOutputStatus(status), 6, true);
-            appendJsonField(sb, "status", status == null ? "PENDING" : status.name(), 6, true);
-            appendJsonField(sb, "zip_file", submission.getZipFile() == null ? "" : submission.getZipFile().getAbsolutePath(), 6, true);
-            appendJsonField(sb, "extracted_folder", submission.getExtractedFolder() == null ? "" : submission.getExtractedFolder().getAbsolutePath(), 6, true);
-            appendJsonField(sb, "output", result == null ? "" : result.getOutput(), 6, true);
-            appendJsonField(sb, "error_message", result == null ? "" : result.getErrorMessage(), 6, true);
-            sb.append("      \"test_results\": [\n");
-
-            List<PerTestResult> perTestResults = submission.getPerTestResults();
-            for (int j = 0; j < perTestResults.size(); j++) {
-                PerTestResult perTestResult = perTestResults.get(j);
-                sb.append("        {\n");
-                appendJsonNumberField(sb, "test_case_id", perTestResult.getTestCaseId(), 10, true);
-                appendJsonField(sb, "status", perTestResult.getStatus() == null ? "" : perTestResult.getStatus().name(), 10, true);
-                appendJsonField(sb, "actual_output", perTestResult.getActualOutput(), 10, true);
-                appendJsonField(sb, "error_message", perTestResult.getErrorMessage(), 10, true);
-                appendJsonNumberField(sb, "exit_code", perTestResult.getExitCode(), 10, false);
-                sb.append("        }");
-                if (j < perTestResults.size() - 1) sb.append(',');
-                sb.append('\n');
-            }
-
-            sb.append("      ]\n");
-            sb.append("    }");
-            if (i < submissions.size() - 1) sb.append(',');
-            sb.append('\n');
-        }
-
-        sb.append("  ]\n");
-        sb.append("}\n");
-        return sb.toString();
-    }
-
-    private void appendJsonField(StringBuilder sb, String key, String value, int spaces, boolean comma) {
-        sb.append(" ".repeat(spaces))
-                .append(JsonUtil.encodeString(key))
-                .append(": ")
-                .append(JsonUtil.encodeString(value));
-        if (comma) sb.append(',');
-        sb.append('\n');
-    }
-
-    private void appendJsonNumberField(StringBuilder sb, String key, long value, int spaces, boolean comma) {
-        sb.append(" ".repeat(spaces))
-                .append(JsonUtil.encodeString(key))
-                .append(": ")
-                .append(value);
-        if (comma) sb.append(',');
-        sb.append('\n');
     }
 
     private void openStudentDetails(StudentZipSubmission submission) {
@@ -3309,20 +3190,41 @@ public class IAEGui extends JFrame {
         tableCard.setBackground(BG_CARD);
         tableCard.setBorder(new LineBorder(BORDER_COLOR, 1, true));
 
+        JPanel topPanel = new JPanel();
+        topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
+        topPanel.setBackground(BG_CARD);
+
+        JPanel statsStrip = createResultsStatsStrip(currentProject);
+        statsStrip.setAlignmentX(Component.LEFT_ALIGNMENT);
+
         JPanel tableHeader = new JPanel(new BorderLayout());
         tableHeader.setBackground(BG_CARD);
         tableHeader.setBorder(new EmptyBorder(20, 22, 20, 22));
+        tableHeader.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JLabel title = new JLabel("Student Results");
         title.setFont(new Font("SansSerif", Font.BOLD, 18));
         title.setForeground(TEXT_PRIMARY);
 
-        JTextField search = createTextField("Search by ID or name...");
-        search.setPreferredSize(new Dimension(300, 40));
-        search.setMaximumSize(new Dimension(300, 40));
+        JPanel filters = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        filters.setBackground(BG_CARD);
+
+        JComboBox<String> statusFilter = new JComboBox<>(new String[]{
+                "All Statuses", "Passed", "Compile Errors", "Runtime Errors", "Wrong Output", "Extraction Errors", "Pending"
+        });
+        statusFilter.setFont(FONT_BODY);
+        statusFilter.setPreferredSize(new Dimension(165, 40));
+        statusFilter.setBackground(Color.WHITE);
+
+        JTextField search = createTextField("Search student ID...");
+        search.setPreferredSize(new Dimension(240, 40));
+        search.setMaximumSize(new Dimension(240, 40));
+
+        filters.add(statusFilter);
+        filters.add(search);
 
         tableHeader.add(title, BorderLayout.WEST);
-        tableHeader.add(search, BorderLayout.EAST);
+        tableHeader.add(filters, BorderLayout.EAST);
 
         String[] columns = {
                 "STUDENT ID", "COMPILE STATUS", "RUN STATUS",
@@ -3376,14 +3278,18 @@ public class IAEGui extends JFrame {
         JButton next = createSecondaryButton("»");
 
         prev.setPreferredSize(new Dimension(44, 36));
-        page.setPreferredSize(new Dimension(44, 36));
+        page.setPreferredSize(new Dimension(74, 36));
+        page.setEnabled(false);
         next.setPreferredSize(new Dimension(44, 36));
 
         pagination.add(prev);
         pagination.add(page);
         pagination.add(next);
 
-        JButton perPage = createSecondaryButton(resultsPerPage + " per page  ⌄");
+        JLabel perPage = new JLabel(resultsPerPage + " per page");
+        perPage.setFont(FONT_BODY);
+        perPage.setForeground(TEXT_SECONDARY);
+        perPage.setHorizontalAlignment(SwingConstants.RIGHT);
         perPage.setPreferredSize(new Dimension(125, 36));
 
         footer.add(showing, BorderLayout.WEST);
@@ -3395,22 +3301,18 @@ public class IAEGui extends JFrame {
         final Runnable[] refreshResultsTable = new Runnable[1];
 
         refreshResultsTable[0] = () -> {
-            String query = getRealText(search, "Search by ID or name...").toLowerCase().trim();
+            String query = getRealText(search, "Search student ID...").toLowerCase().trim();
+            String selectedStatus = (String) statusFilter.getSelectedItem();
 
             List<StudentZipSubmission> filteredSubmissions = new ArrayList<>();
 
             for (StudentZipSubmission s : currentProject.getSubmissions()) {
                 Status status = s.getResult() == null ? null : s.getResult().getStatus();
 
-                String searchableText = (
-                        s.getStudentId() + " " +
-                                getCompileStatus(status) + " " +
-                                getRunStatus(status) + " " +
-                                getOutputStatus(status) + " " +
-                                getFinalStatus(status)
-                ).toLowerCase();
+                boolean idMatches = query.isEmpty() || s.getStudentId().toLowerCase().contains(query);
+                boolean statusMatches = matchesResultsStatusFilter(status, selectedStatus);
 
-                if (query.isEmpty() || searchableText.contains(query)) {
+                if (idMatches && statusMatches) {
                     filteredSubmissions.add(s);
                 }
             }
@@ -3449,10 +3351,10 @@ public class IAEGui extends JFrame {
                 showing.setText("Showing " + (start + 1) + " to " + end + " of " + totalRows + " results");
             }
 
-            page.setText(String.valueOf(resultsPage));
+            page.setText(resultsPage + " / " + totalPages);
             prev.setEnabled(resultsPage > 1);
             next.setEnabled(resultsPage < totalPages);
-            perPage.setText(resultsPerPage + " per page  ⌄");
+            perPage.setText(resultsPerPage + " per page");
         };
 
         search.getDocument().addDocumentListener(new DocumentListener() {
@@ -3475,6 +3377,11 @@ public class IAEGui extends JFrame {
             public void changedUpdate(DocumentEvent e) {
                 updateSearch();
             }
+        });
+
+        statusFilter.addActionListener(e -> {
+            resultsPage = 1;
+            refreshResultsTable[0].run();
         });
 
         prev.addActionListener(e -> {
@@ -3504,11 +3411,82 @@ public class IAEGui extends JFrame {
 
         refreshResultsTable[0].run();
 
-        tableCard.add(tableHeader, BorderLayout.NORTH);
+        topPanel.add(statsStrip);
+        topPanel.add(tableHeader);
+
+        tableCard.add(topPanel, BorderLayout.NORTH);
         tableCard.add(tableHolder, BorderLayout.CENTER);
         tableCard.add(footer, BorderLayout.SOUTH);
 
         return tableCard;
+    }
+
+    private JPanel createResultsStatsStrip(Project project) {
+        int total = 0;
+        int passed = 0;
+        int compileErrors = 0;
+        int runtimeErrors = 0;
+        int wrongOutput = 0;
+
+        if (project != null && project.getSubmissions() != null) {
+            total = project.getSubmissions().size();
+            for (StudentZipSubmission submission : project.getSubmissions()) {
+                Status status = submission.getResult() == null ? null : submission.getResult().getStatus();
+                if (status == Status.SUCCESS) passed++;
+                else if (status == Status.COMPILE_ERROR) compileErrors++;
+                else if (status == Status.RUNTIME_ERROR) runtimeErrors++;
+                else if (status == Status.WRONG_OUTPUT) wrongOutput++;
+            }
+        }
+
+        int passRate = total == 0 ? 0 : (int) Math.round((passed * 100.0) / total);
+
+        JPanel strip = new JPanel(new GridLayout(1, 6, 10, 0));
+        strip.setBackground(BG_CARD);
+        strip.setBorder(new EmptyBorder(18, 22, 0, 22));
+        strip.setMaximumSize(new Dimension(Integer.MAX_VALUE, 74));
+        strip.setPreferredSize(new Dimension(0, 74));
+
+        strip.add(createCompactResultStat("Total", String.valueOf(total), new Color(37, 99, 235)));
+        strip.add(createCompactResultStat("Passed", String.valueOf(passed), new Color(22, 163, 74)));
+        strip.add(createCompactResultStat("Compile Errors", String.valueOf(compileErrors), new Color(234, 88, 12)));
+        strip.add(createCompactResultStat("Runtime Errors", String.valueOf(runtimeErrors), new Color(220, 38, 38)));
+        strip.add(createCompactResultStat("Wrong Output", String.valueOf(wrongOutput), new Color(147, 51, 234)));
+        strip.add(createCompactResultStat("Pass Rate", passRate + "%", new Color(8, 145, 178)));
+
+        return strip;
+    }
+
+    private JPanel createCompactResultStat(String label, String value, Color accent) {
+        JPanel card = new JPanel(new BorderLayout(8, 0));
+        card.setBackground(new Color(248, 250, 252));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(BORDER_COLOR, 1, true),
+                new EmptyBorder(9, 12, 9, 12)
+        ));
+
+        JLabel valueLabel = new JLabel(value);
+        valueLabel.setFont(new Font("SansSerif", Font.BOLD, 18));
+        valueLabel.setForeground(accent);
+
+        JLabel labelText = new JLabel(label);
+        labelText.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        labelText.setForeground(TEXT_SECONDARY);
+
+        card.add(valueLabel, BorderLayout.NORTH);
+        card.add(labelText, BorderLayout.CENTER);
+        return card;
+    }
+
+    private boolean matchesResultsStatusFilter(Status status, String selectedStatus) {
+        if (selectedStatus == null || selectedStatus.equals("All Statuses")) return true;
+        if (selectedStatus.equals("Pending")) return status == null;
+        if (selectedStatus.equals("Passed")) return status == Status.SUCCESS;
+        if (selectedStatus.equals("Compile Errors")) return status == Status.COMPILE_ERROR;
+        if (selectedStatus.equals("Runtime Errors")) return status == Status.RUNTIME_ERROR;
+        if (selectedStatus.equals("Wrong Output")) return status == Status.WRONG_OUTPUT;
+        if (selectedStatus.equals("Extraction Errors")) return status == Status.EXTRACTION_ERROR;
+        return true;
     }
     private JPanel createSideStatCard(String title, String value, String iconType, Color accent, Color softBg) {
         JPanel card = new JPanel(new BorderLayout(18, 0));
