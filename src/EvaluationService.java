@@ -4,11 +4,15 @@ import java.util.List;
 public class EvaluationService {
 
     private final Evaluator evaluator;
-    private final ExactMatchComparator comparator;
+    private final OutputComparator comparator;
 
     public EvaluationService() {
+        this(new ExactMatchComparator());
+    }
+
+    public EvaluationService(OutputComparator comparator) {
         this.evaluator = new Evaluator();
-        this.comparator = new ExactMatchComparator();
+        this.comparator = comparator == null ? new ExactMatchComparator() : comparator;
     }
 
     public void evaluateProject(Project project) {
@@ -103,7 +107,7 @@ public class EvaluationService {
                         compileResult
                 );
 
-                Result testResult = comparator.toResult(
+                Result testResult = toResult(
                         evalResult,
                         testCase.getExpectedOutput()
                 );
@@ -170,6 +174,39 @@ public class EvaluationService {
         );
     }
 
+    private Result toResult(EvaluationResult evalResult, String expectedOutput) {
+        if (!evalResult.isCompiled()) {
+            return new Result(
+                    Status.COMPILE_ERROR,
+                    "",
+                    evalResult.getCompileStderr()
+            );
+        }
+
+        if (evalResult.getRunExitCode() != 0) {
+            return new Result(
+                    Status.RUNTIME_ERROR,
+                    evalResult.getRunStdout(),
+                    evalResult.getRunStderr()
+            );
+        }
+
+        boolean match = comparator.compare(evalResult.getRunStdout(), expectedOutput);
+
+        if (!match) {
+            return new Result(
+                    Status.WRONG_OUTPUT,
+                    evalResult.getRunStdout(),
+                    ""
+            );
+        }
+
+        return new Result(
+                Status.SUCCESS,
+                evalResult.getRunStdout(),
+                ""
+        );
+    }
     private Status chooseWorseStatus(Status current, Status candidate) {
         if (candidate == Status.RUNTIME_ERROR) {
             return Status.RUNTIME_ERROR;

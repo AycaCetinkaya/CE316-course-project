@@ -1,12 +1,16 @@
 import java.util.List;
 
 public class Project {
+    public static final String COMPARATOR_EXACT_MATCH = "Exact Match";
+    public static final String COMPARATOR_WHITESPACE_INSENSITIVE = "Whitespace Insensitive";
+
     private String name;
     private long id;
     private Configuration configuration;
     private List<StudentZipSubmission> submissions;
     private List<TestCase> testCases;
     private long lastModified;
+    private String comparatorType;
 
     public Project(String name, Configuration configuration,
                    List<StudentZipSubmission> submissions,
@@ -17,6 +21,7 @@ public class Project {
         this.submissions = submissions;
         this.testCases = testCases;
         this.lastModified = 0L;
+        this.comparatorType = COMPARATOR_EXACT_MATCH;
     }
 
     public String getName() { return name; }
@@ -28,4 +33,16 @@ public class Project {
     public long getLastModified() { return lastModified; }
     public void setLastModified(long lastModified) { this.lastModified = lastModified; }
     public void setName(String name) { this.name = name; }
+
+    public String getComparatorType() {
+        return comparatorType;
+    }
+
+    public void setComparatorType(String comparatorType) {
+        if (comparatorType == null || comparatorType.trim().isEmpty()) {
+            this.comparatorType = COMPARATOR_EXACT_MATCH;
+        } else {
+            this.comparatorType = comparatorType;
+        }
+    }
 }

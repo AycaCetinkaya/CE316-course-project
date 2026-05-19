@@ -19,6 +19,22 @@ public class ProjectRunnerService {
                               List<TestCase> testCases,
                               Configuration selectedConfig,
                               ProgressListener progressListener) throws ZipServiceException {
+        return runProject(
+                projectName,
+                submissionsDir,
+                testCases,
+                selectedConfig,
+                progressListener,
+                Project.COMPARATOR_EXACT_MATCH
+        );
+    }
+
+    public Project runProject(String projectName,
+                              File submissionsDir,
+                              List<TestCase> testCases,
+                              Configuration selectedConfig,
+                              ProgressListener progressListener,
+                              String comparatorType) throws ZipServiceException {
 
         DatabaseManager db = new DatabaseManager();
         long projectId = -1;
@@ -38,7 +54,7 @@ public class ProjectRunnerService {
         ZipService zipService = new ZipService();
         List<StudentZipSubmission> submissions = zipService.extractAll(submissionsDir);
 
-        EvaluationService evaluationService = new EvaluationService();
+        EvaluationService evaluationService = new EvaluationService(createComparator(comparatorType));
 
         try {
             for (int i = 0; i < submissions.size(); i++) {
@@ -104,7 +120,16 @@ public class ProjectRunnerService {
                 testCases
         );
         resultProject.setId(projectId);
+        resultProject.setComparatorType(comparatorType);
         return resultProject;
+    }
+
+    private OutputComparator createComparator(String comparatorType) {
+        if (Project.COMPARATOR_WHITESPACE_INSENSITIVE.equals(comparatorType)) {
+            return new WhitespaceInsensitiveComparator();
+        }
+
+        return new ExactMatchComparator();
     }
 
     private void persistSubmission(DatabaseManager db, long projectId, StudentZipSubmission submission) {

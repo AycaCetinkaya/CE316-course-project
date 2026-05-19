@@ -30,6 +30,7 @@ public class IAEGui extends JFrame {
 
     private JTextField txtProjectName;
     private JComboBox<String> cmbConfiguration;
+    private JComboBox<String> cmbComparator;
     private JTextField txtInputFile;
     private JTextField txtExpectedOutputFile;
     private JTextField txtSubmissionsFolder;
@@ -1062,8 +1063,8 @@ public class IAEGui extends JFrame {
         content.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel projectInfoCard = createCardPanel();
-        projectInfoCard.setMaximumSize(new Dimension(720, 210));
-        projectInfoCard.setPreferredSize(new Dimension(720, 210));
+        projectInfoCard.setMaximumSize(new Dimension(720, 285));
+        projectInfoCard.setPreferredSize(new Dimension(720, 285));
         projectInfoCard.setLayout(new BoxLayout(projectInfoCard, BoxLayout.Y_AXIS));
 
         txtProjectName = createTextField("e.g., Data Structures - Assignment 1");
@@ -1082,6 +1083,15 @@ public class IAEGui extends JFrame {
         cmbConfiguration.setFont(FONT_BODY);
         cmbConfiguration.setBackground(Color.WHITE);
 
+        cmbComparator = new JComboBox<>(new String[]{
+                Project.COMPARATOR_EXACT_MATCH,
+                Project.COMPARATOR_WHITESPACE_INSENSITIVE
+        });
+        cmbComparator.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        cmbComparator.setPreferredSize(new Dimension(0, 38));
+        cmbComparator.setFont(FONT_BODY);
+        cmbComparator.setBackground(Color.WHITE);
+
         projectInfoCard.add(createSectionTitle("▤  Project Information"));
         projectInfoCard.add(Box.createVerticalStrut(14));
         projectInfoCard.add(createLabel("Project Name"));
@@ -1091,6 +1101,11 @@ public class IAEGui extends JFrame {
         projectInfoCard.add(createLabel("Configuration"));
         projectInfoCard.add(Box.createVerticalStrut(6));
         projectInfoCard.add(cmbConfiguration);
+
+        projectInfoCard.add(Box.createVerticalStrut(14));
+        projectInfoCard.add(createLabel("Output Comparator"));
+        projectInfoCard.add(Box.createVerticalStrut(6));
+        projectInfoCard.add(cmbComparator);
 
         JPanel filesCard = createCardPanel();
         filesCard.setMaximumSize(new Dimension(720, 340));
@@ -1281,6 +1296,9 @@ public class IAEGui extends JFrame {
         final String projectName = getRealText(txtProjectName, "e.g., Data Structures - Assignment 1");
         final String submissionsPath = getRealText(txtSubmissionsFolder, "Select folder containing ZIP files...");
         final String selected = (String) cmbConfiguration.getSelectedItem();
+        final String comparatorType = cmbComparator == null || cmbComparator.getSelectedItem() == null
+                ? Project.COMPARATOR_EXACT_MATCH
+                : cmbComparator.getSelectedItem().toString();
         final String inputPath = getRealText(txtInputFile, "Select input file...");
         final String expectedPath = getRealText(txtExpectedOutputFile, "Select expected output file...");
 
@@ -1314,7 +1332,8 @@ public class IAEGui extends JFrame {
                                             "Evaluating " + current + " / " + total + " - Student: " + studentId
                                     );
                                 }
-                            }
+                            },
+                            comparatorType
                     );
                 },
                 project -> {
@@ -1324,6 +1343,7 @@ public class IAEGui extends JFrame {
                         ex.printStackTrace();
                     }
                     currentProject = project;
+                    currentProject.setComparatorType(comparatorType);
                     rememberProjectPaths(projectName, inputPath, expectedPath, submissionsPath);
 
                     JOptionPane.showMessageDialog(this, "Project evaluated successfully.");
@@ -1369,12 +1389,20 @@ public class IAEGui extends JFrame {
         final String projectName = currentProject.getName();
         final List<TestCase> testCases = currentProject.getTestCases();
         final Configuration projectConfig = currentProject.getConfiguration();
+        final String comparatorType = currentProject.getComparatorType();
 
         runEvaluationAsync(
                 "Re-running '" + projectName + "', please wait...",
                 () -> {
                     ProjectRunnerService runner = new ProjectRunnerService();
-                    runner.runProject(projectName, submissionsDir, testCases, projectConfig);
+                    runner.runProject(
+                            projectName,
+                            submissionsDir,
+                            testCases,
+                            projectConfig,
+                            null,
+                            comparatorType
+                    );
 
                     DatabaseManager db = new DatabaseManager();
                     db.connect();
@@ -2935,31 +2963,8 @@ public class IAEGui extends JFrame {
         compilationOutput.setPreferredSize(new Dimension(1050, 165));
         compilationOutput.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JPanel outputGrid = new JPanel(new GridLayout(1, 2, 18, 0));
-        outputGrid.setBackground(BG_CANVAS);
-        outputGrid.setMaximumSize(new Dimension(1050, 210));
-        outputGrid.setPreferredSize(new Dimension(1050, 210));
+        JPanel outputGrid = createDiffVisualizationCard();
         outputGrid.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        String programOutput = result == null || result.getOutput() == null || result.getOutput().isBlank()
-                ? "(Program did not run)"
-                : result.getOutput();
-
-        String expectedOutput = "(No expected output)";
-        if (currentProject != null && currentProject.getTestCases() != null && !currentProject.getTestCases().isEmpty()) {
-            StringBuilder sb = new StringBuilder();
-
-            for (int i = 0; i < currentProject.getTestCases().size(); i++) {
-                TestCase tc = currentProject.getTestCases().get(i);
-                sb.append("Test Case ").append(i + 1).append(":\n");
-                sb.append(tc.getExpectedOutput()).append("\n\n");
-            }
-
-            expectedOutput = sb.toString().trim();
-        }
-
-        outputGrid.add(createOutputBlock("Program Output", programOutput, false));
-        outputGrid.add(createOutputBlock("Expected Output", expectedOutput, false));
 
         JPanel comparison = createComparisonCard(status);
         comparison.setMaximumSize(new Dimension(1050, 115));
@@ -2978,6 +2983,192 @@ public class IAEGui extends JFrame {
 
         panel.add(content, BorderLayout.CENTER);
         return panel;
+    }
+
+    private JPanel createDiffVisualizationCard() {
+        JPanel card = createCardPanel();
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+
+        JLabel title = createSectionTitle("Expected vs Actual Output Diff");
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(title);
+        card.add(Box.createVerticalStrut(12));
+
+        if (currentSubmission == null) {
+            JLabel empty = new JLabel("No student submission selected.");
+            empty.setFont(FONT_BODY);
+            empty.setForeground(TEXT_SECONDARY);
+            card.add(empty);
+            card.setMaximumSize(new Dimension(1050, 120));
+            return card;
+        }
+
+        if (currentProject == null || currentProject.getTestCases() == null || currentProject.getTestCases().isEmpty()) {
+            JLabel empty = new JLabel("No test cases found.");
+            empty.setFont(FONT_BODY);
+            empty.setForeground(TEXT_SECONDARY);
+            card.add(empty);
+            card.setMaximumSize(new Dimension(1050, 120));
+            return card;
+        }
+
+        List<TestCase> testCases = currentProject.getTestCases();
+        List<PerTestResult> perTestResults = currentSubmission.getPerTestResults();
+
+        int total = Math.max(testCases.size(), perTestResults.size());
+        int totalRows = 0;
+
+        for (int i = 0; i < total; i++) {
+            TestCase testCase = i < testCases.size() ? testCases.get(i) : null;
+            PerTestResult perTestResult = i < perTestResults.size() ? perTestResults.get(i) : null;
+
+            String expected = testCase == null ? "" : testCase.getExpectedOutput();
+            String actual = perTestResult == null ? "" : perTestResult.getActualOutput();
+            Status rowStatus = perTestResult == null ? null : perTestResult.getStatus();
+
+            List<LineDiff.Row> diffRows = LineDiff.diff(expected, actual);
+            totalRows += diffRows.size();
+
+            JPanel testPanel = createSingleTestDiffPanel(i + 1, rowStatus, diffRows);
+            testPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+            card.add(testPanel);
+
+            if (i < total - 1) {
+                card.add(Box.createVerticalStrut(14));
+            }
+        }
+
+        int height = 70 + (total * 58) + (totalRows * 32);
+        height = Math.max(150, height);
+        height = Math.min(520, height);
+
+        card.setPreferredSize(new Dimension(1050, height));
+        card.setMaximumSize(new Dimension(1050, height));
+
+        return card;
+    }
+
+    private JPanel createSingleTestDiffPanel(int testNumber, Status status, List<LineDiff.Row> diffRows) {
+        JPanel wrapper = new JPanel();
+        wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.Y_AXIS));
+        wrapper.setBackground(BG_CARD);
+        wrapper.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(BORDER_COLOR, 1, true),
+                new EmptyBorder(12, 12, 12, 12)
+        ));
+
+        String statusText = status == null ? "UNKNOWN" : status.name();
+
+        JLabel header = new JLabel("Test Case " + testNumber + "  •  " + statusText);
+        header.setFont(FONT_SUBHEADER);
+        header.setForeground(TEXT_PRIMARY);
+        header.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel columnHeader = new JPanel(new GridLayout(1, 2, 12, 0));
+        columnHeader.setBackground(BG_CARD);
+        columnHeader.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+        columnHeader.setPreferredSize(new Dimension(1000, 24));
+        columnHeader.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        columnHeader.add(createDiffHeaderLabel("Expected"));
+        columnHeader.add(createDiffHeaderLabel("Actual"));
+
+        JPanel rowsPanel = new JPanel();
+        rowsPanel.setLayout(new BoxLayout(rowsPanel, BoxLayout.Y_AXIS));
+        rowsPanel.setBackground(BG_CARD);
+        rowsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        for (LineDiff.Row row : diffRows) {
+            rowsPanel.add(createDiffRow(row));
+        }
+
+        wrapper.add(header);
+        wrapper.add(Box.createVerticalStrut(10));
+        wrapper.add(columnHeader);
+        wrapper.add(Box.createVerticalStrut(6));
+        wrapper.add(rowsPanel);
+
+        int rowHeight = 24;
+        int panelHeight = 24 + 10 + 24 + 6 + (diffRows.size() * rowHeight) + 24;
+
+        wrapper.setPreferredSize(new Dimension(1000, panelHeight));
+        wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, panelHeight));
+
+        return wrapper;
+    }
+
+    private JLabel createDiffHeaderLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(FONT_BODY);
+        label.setForeground(TEXT_SECONDARY);
+        label.setHorizontalAlignment(SwingConstants.LEFT);
+        label.setBorder(new EmptyBorder(0, 10, 0, 10));
+        return label;
+    }
+
+    private JPanel createDiffRow(LineDiff.Row row) {
+        JPanel line = new JPanel(new GridLayout(1, 2, 12, 0));
+        line.setBackground(getDiffColor(row.getType()));
+        line.setPreferredSize(new Dimension(1000, 24));
+        line.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+        line.setBorder(new EmptyBorder(0, 0, 0, 0));
+
+        line.add(createDiffCell(row.getLineNumber(), row.getExpectedLine(), row.getType()));
+        line.add(createDiffCell(row.getLineNumber(), row.getActualLine(), row.getType()));
+
+        return line;
+    }
+
+    private JLabel createDiffCell(int lineNumber, String text, LineDiff.Type type) {
+        String safeText = escapeHtml(text);
+
+        if (safeText.isEmpty()) {
+            safeText = "&nbsp;";
+        }
+
+        JLabel label = new JLabel(
+                "<html><span style='color:#64748B;'>" + lineNumber + " | </span>" +
+                        "<span style='font-family:monospace;'>" + safeText + "</span></html>"
+        );
+
+        label.setOpaque(true);
+        label.setBackground(getDiffColor(type));
+        label.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        label.setForeground(TEXT_PRIMARY);
+        label.setHorizontalAlignment(SwingConstants.LEFT);
+        label.setVerticalAlignment(SwingConstants.CENTER);
+        label.setBorder(new EmptyBorder(2, 10, 2, 10));
+
+        return label;
+    }
+
+    private Color getDiffColor(LineDiff.Type type) {
+        if (type == LineDiff.Type.CHANGED) {
+            return new Color(254, 249, 195);
+        }
+
+        if (type == LineDiff.Type.MISSING_ACTUAL) {
+            return new Color(254, 226, 226);
+        }
+
+        if (type == LineDiff.Type.MISSING_EXPECTED) {
+            return new Color(219, 234, 254);
+        }
+
+        return Color.WHITE;
+    }
+
+    private String escapeHtml(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        return value
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
     }
     private JLabel createStatusBadge(String text) {
         JLabel badge = new JLabel("  ⊗  " + text + "  ");
