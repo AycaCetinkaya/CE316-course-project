@@ -1743,6 +1743,29 @@ public class IAEGui extends JFrame {
                 }
             });
 
+            panel.btnCopy.addActionListener(e -> {
+                stopCellEditing();
+                if (currentConfig != null) {
+                    // Generate a unique duplicate name
+                    String duplicateName = generateDuplicateName(currentConfig.getName());
+
+                    // Create the new cloned Configuration object
+                    Configuration duplicatedConfig = new Configuration(
+                            duplicateName,
+                            currentConfig.getLanguage(),
+                            currentConfig.getCompileCommand(),
+                            currentConfig.getRunCommand(),
+                            currentConfig.getSourceExtension(),
+                            currentConfig.getEntryPointPattern()
+                    );
+
+                    // Update runtime list, save to database, and refresh the UI layout
+                    allConfigs.add(duplicatedConfig);
+                    persistConfigurationToDb(duplicatedConfig);
+                    refreshConfigPage();
+                }
+            });
+
             panel.btnDelete.addActionListener(e -> {
                 stopCellEditing();
                 if (currentConfig != null) {
@@ -1756,6 +1779,30 @@ public class IAEGui extends JFrame {
                     }
                 }
             });
+        }
+
+        /**
+         * Loops through existing configurations to find a unique "Copy" name.
+         * Prevents duplicate keys if the user clicks copy multiple times.
+         */
+        private String generateDuplicateName(String baseName) {
+            String targetName = baseName + " (Copy)";
+            int counter = 2;
+
+            while (configExists(targetName)) {
+                targetName = baseName + " (Copy " + counter + ")";
+                counter++;
+            }
+            return targetName;
+        }
+
+        private boolean configExists(String name) {
+            for (Configuration config : allConfigs) {
+                if (config.getName().equalsIgnoreCase(name)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         @Override
@@ -1775,14 +1822,17 @@ public class IAEGui extends JFrame {
 
     private class ActionButtonsPanel extends JPanel {
         public final JButton btnEdit = new JButton("✎");
+        public final JButton btnCopy = new JButton("📋");
         public final JButton btnDelete = new JButton("🗑");
 
         public ActionButtonsPanel() {
             setLayout(new FlowLayout(FlowLayout.CENTER, 8, 20));
             setBackground(Color.WHITE);
             styleActionButton(btnEdit, TEXT_PRIMARY);
+            styleActionButton(btnCopy, new Color(16, 185, 129)); // Clean Emerald Green for copy action
             styleActionButton(btnDelete, new Color(220, 38, 38));
             add(btnEdit);
+            add(btnCopy);
             add(btnDelete);
         }
 
