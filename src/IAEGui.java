@@ -31,8 +31,7 @@ public class IAEGui extends JFrame {
     private JTextField txtProjectName;
     private JComboBox<String> cmbConfiguration;
     private JComboBox<String> cmbComparator;
-    private JTextField txtInputFile;
-    private JTextField txtExpectedOutputFile;
+    private DefaultTableModel testCaseTableModel;
     private JTextField txtSubmissionsFolder;
     private final Map<String, ProjectFilePaths> projectPathsByName = new HashMap<>();
 
@@ -1108,12 +1107,110 @@ public class IAEGui extends JFrame {
         projectInfoCard.add(cmbComparator);
 
         JPanel filesCard = createCardPanel();
-        filesCard.setMaximumSize(new Dimension(720, 340));
-        filesCard.setPreferredSize(new Dimension(720, 340));
+        filesCard.setMaximumSize(new Dimension(720, Integer.MAX_VALUE));
         filesCard.setLayout(new BoxLayout(filesCard, BoxLayout.Y_AXIS));
 
-        txtInputFile = createTextField("Select input file...");
-        txtExpectedOutputFile = createTextField("Select expected output file...");
+        testCaseTableModel = new DefaultTableModel(
+                new String[]{"Input File (path)", "Expected Output File (path)"}, 0) {
+            @Override public boolean isCellEditable(int row, int col) { return false; }
+        };
+
+        JTable testCaseTable = new JTable(testCaseTableModel);
+        testCaseTable.setFont(FONT_BODY);
+        testCaseTable.setRowHeight(28);
+        testCaseTable.setShowGrid(true);
+        testCaseTable.setGridColor(new Color(226, 232, 240));
+        testCaseTable.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 12));
+        testCaseTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        testCaseTable.setBackground(Color.WHITE);
+        testCaseTable.getColumnModel().getColumn(0).setPreferredWidth(300);
+        testCaseTable.getColumnModel().getColumn(1).setPreferredWidth(300);
+
+        JScrollPane tableScroll = new JScrollPane(testCaseTable);
+        tableScroll.setAlignmentX(Component.LEFT_ALIGNMENT);
+        tableScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 180));
+        tableScroll.setPreferredSize(new Dimension(0, 180));
+        tableScroll.setBorder(new LineBorder(new Color(226, 232, 240), 1));
+
+        JPanel tcToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        tcToolbar.setBackground(BG_CARD);
+        tcToolbar.setAlignmentX(Component.LEFT_ALIGNMENT);
+        tcToolbar.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+
+        JButton btnAddTC    = createSecondaryButton("+ Add");
+        JButton btnRemoveTC = createSecondaryButton("− Remove");
+        JButton btnMoveUp   = createSecondaryButton("↑");
+        JButton btnMoveDown = createSecondaryButton("↓");
+
+        for (JButton b : new JButton[]{btnAddTC, btnRemoveTC, btnMoveUp, btnMoveDown}) {
+            b.setFont(new Font("SansSerif", Font.BOLD, 12));
+            b.setPreferredSize(new Dimension(b == btnMoveUp || b == btnMoveDown ? 42 : 88, 30));
+        }
+        tcToolbar.add(btnAddTC);
+        tcToolbar.add(btnRemoveTC);
+        tcToolbar.add(Box.createHorizontalStrut(6));
+        tcToolbar.add(btnMoveUp);
+        tcToolbar.add(btnMoveDown);
+
+        btnAddTC.addActionListener(e -> {
+            JFileChooser fc = new JFileChooser(".");
+            fc.setDialogTitle("Select Input File (or Cancel for no-input test)");
+            fc.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            String inputPath = "";
+            if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                inputPath = fc.getSelectedFile().getAbsolutePath();
+            }
+            fc.setDialogTitle("Select Expected Output File");
+            String expectedPath = "";
+            if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                expectedPath = fc.getSelectedFile().getAbsolutePath();
+            }
+            testCaseTableModel.addRow(new Object[]{inputPath, expectedPath});
+        });
+
+        btnRemoveTC.addActionListener(e -> {
+            int row = testCaseTable.getSelectedRow();
+            if (row >= 0) testCaseTableModel.removeRow(row);
+        });
+
+        btnMoveUp.addActionListener(e -> {
+            int row = testCaseTable.getSelectedRow();
+            if (row > 0) {
+                Object input    = testCaseTableModel.getValueAt(row, 0);
+                Object expected = testCaseTableModel.getValueAt(row, 1);
+                testCaseTableModel.removeRow(row);
+                testCaseTableModel.insertRow(row - 1, new Object[]{input, expected});
+                testCaseTable.setRowSelectionInterval(row - 1, row - 1);
+            }
+        });
+
+        btnMoveDown.addActionListener(e -> {
+            int row = testCaseTable.getSelectedRow();
+            if (row >= 0 && row < testCaseTableModel.getRowCount() - 1) {
+                Object input    = testCaseTableModel.getValueAt(row, 0);
+                Object expected = testCaseTableModel.getValueAt(row, 1);
+                testCaseTableModel.removeRow(row);
+                testCaseTableModel.insertRow(row + 1, new Object[]{input, expected});
+                testCaseTable.setRowSelectionInterval(row + 1, row + 1);
+            }
+        });
+
+        JLabel tcHint = new JLabel("Each row is one test case. Click + Add to browse for files.");
+        tcHint.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        tcHint.setForeground(TEXT_SECONDARY);
+        tcHint.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        filesCard.add(createSectionTitle("▣  Test Cases"));
+        filesCard.add(Box.createVerticalStrut(8));
+        filesCard.add(tcHint);
+        filesCard.add(Box.createVerticalStrut(10));
+        filesCard.add(tcToolbar);
+        filesCard.add(Box.createVerticalStrut(8));
+        filesCard.add(tableScroll);
+        filesCard.add(Box.createVerticalStrut(16));
+        filesCard.add(createSectionTitle("   Student Submissions"));
+        filesCard.add(Box.createVerticalStrut(10));
+
         txtSubmissionsFolder = createTextField("Select folder containing ZIP files...");
         File defaultFolder = new File("test-submissions");
         if (defaultFolder.exists()) {
@@ -1121,12 +1218,6 @@ public class IAEGui extends JFrame {
             txtSubmissionsFolder.setForeground(TEXT_PRIMARY);
         }
 
-        filesCard.add(createSectionTitle("▣  Files and Folders"));
-        filesCard.add(Box.createVerticalStrut(16));
-        filesCard.add(createFileChooserRow("Input File", txtInputFile, false, "Test input file for student programs"));
-        filesCard.add(Box.createVerticalStrut(12));
-        filesCard.add(createFileChooserRow("Expected Output File", txtExpectedOutputFile, false, "Expected output for comparison"));
-        filesCard.add(Box.createVerticalStrut(12));
         filesCard.add(createFileChooserRow("Student Submissions Folder", txtSubmissionsFolder, true, "Directory containing student submission ZIP files"));
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
@@ -1166,12 +1257,16 @@ public class IAEGui extends JFrame {
         try {
             String projectName = getRealText(txtProjectName, "e.g., Data Structures - Assignment 1");
             String selected = (String) cmbConfiguration.getSelectedItem();
-            String inputPath = getRealText(txtInputFile, "Select input file...");
-            String expectedPath = getRealText(txtExpectedOutputFile, "Select expected output file...");
             String submissionsPath = getRealText(txtSubmissionsFolder, "Select folder containing ZIP files...");
 
             if (projectName.isEmpty() || selected == null) {
                 JOptionPane.showMessageDialog(this, "Please fill project name and configuration.");
+                return;
+            }
+
+            List<TestCase> testCases = buildTestCasesFromForm();
+            if (testCases.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Please add at least one test case.");
                 return;
             }
 
@@ -1184,8 +1279,8 @@ public class IAEGui extends JFrame {
             try {
                 db.connect();
                 db.initSchema();
-                db.saveProject(projectName, projectConfig, buildTestCasesFromForm());
-                rememberProjectPaths(projectName, inputPath, expectedPath, submissionsPath);
+                db.saveProject(projectName, projectConfig, testCases);
+                rememberProjectPaths(projectName, "", "", submissionsPath);
             } finally {
                 db.disconnect();
             }
@@ -1200,22 +1295,21 @@ public class IAEGui extends JFrame {
     }
 
     private List<TestCase> buildTestCasesFromForm() throws java.io.IOException {
-        String inputPath = getRealText(txtInputFile, "Select input file...");
-        String expectedPath = getRealText(txtExpectedOutputFile, "Select expected output file...");
-
         List<TestCase> testCases = new ArrayList<>();
 
-        if (!expectedPath.isEmpty()) {
-            String input = inputPath.isEmpty()
+        for (int i = 0; i < testCaseTableModel.getRowCount(); i++) {
+            String inputPath    = (String) testCaseTableModel.getValueAt(i, 0);
+            String expectedPath = (String) testCaseTableModel.getValueAt(i, 1);
+
+            String input = (inputPath == null || inputPath.isBlank())
                     ? ""
                     : java.nio.file.Files.readString(java.nio.file.Paths.get(inputPath)).trim();
 
-            String expected = java.nio.file.Files.readString(java.nio.file.Paths.get(expectedPath)).trim();
+            String expected = (expectedPath == null || expectedPath.isBlank())
+                    ? ""
+                    : java.nio.file.Files.readString(java.nio.file.Paths.get(expectedPath)).trim();
+
             testCases.add(new TestCase(input, expected));
-        } else {
-            testCases.add(new TestCase("3 1 2", "1 2 3"));
-            testCases.add(new TestCase("9 4 7", "4 7 9"));
-            testCases.add(new TestCase("10 2 5", "2 5 10"));
         }
 
         return testCases;
@@ -1299,8 +1393,6 @@ public class IAEGui extends JFrame {
         final String comparatorType = cmbComparator == null || cmbComparator.getSelectedItem() == null
                 ? Project.COMPARATOR_EXACT_MATCH
                 : cmbComparator.getSelectedItem().toString();
-        final String inputPath = getRealText(txtInputFile, "Select input file...");
-        final String expectedPath = getRealText(txtExpectedOutputFile, "Select expected output file...");
 
         if (projectName.isEmpty() || submissionsPath.isEmpty() || selected == null) {
             JOptionPane.showMessageDialog(this, "Please fill project name and submissions folder.");
@@ -1314,6 +1406,11 @@ public class IAEGui extends JFrame {
         } catch (Exception ex) {
             ex.printStackTrace();
             JOptionPane.showMessageDialog(this, "Failed to read test case files: " + ex.getMessage());
+            return;
+        }
+
+        if (testCases.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please add at least one test case before running.");
             return;
         }
 
@@ -1344,7 +1441,7 @@ public class IAEGui extends JFrame {
                     }
                     currentProject = project;
                     currentProject.setComparatorType(comparatorType);
-                    rememberProjectPaths(projectName, inputPath, expectedPath, submissionsPath);
+                    rememberProjectPaths(projectName, "", "", submissionsPath);
 
                     JOptionPane.showMessageDialog(this, "Project evaluated successfully.");
                     refreshDashboard();
@@ -1568,8 +1665,7 @@ public class IAEGui extends JFrame {
     private void clearCreateProjectForm() {
         resetPlaceholder(txtProjectName, "e.g., Data Structures - Assignment 1");
         cmbConfiguration.setSelectedIndex(0);
-        resetPlaceholder(txtInputFile, "Select input file...");
-        resetPlaceholder(txtExpectedOutputFile, "Select expected output file...");
+        testCaseTableModel.setRowCount(0);
         resetPlaceholder(txtSubmissionsFolder, "Select folder containing ZIP files...");
     }
 
