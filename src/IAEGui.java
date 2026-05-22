@@ -1714,22 +1714,89 @@ public class IAEGui extends JFrame {
         });
 
         btnExport.addActionListener(e -> {
-            if (allConfigs.isEmpty()) {
+            if (allConfigs == null || allConfigs.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Nothing to export.");
                 return;
             }
 
-            JFileChooser fileChooser = new JFileChooser();
-            fileChooser.setDialogTitle("Export Configurations");
-            fileChooser.setSelectedFile(new File("exported_configs.json"));
+            // 1. Open up a modern modal window to select which configurations to extract
+            JDialog exportDialog = new JDialog(this, "Select configurations to export", true);
+            exportDialog.setLayout(new BorderLayout(10, 10));
+            exportDialog.setSize(400, 300);
+            exportDialog.setLocationRelativeTo(this);
 
-            if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-                File saveFile = fileChooser.getSelectedFile();
-                try {
-                    configStore.saveTo(saveFile, allConfigs);
-                    JOptionPane.showMessageDialog(this, "Configurations exported successfully to:\n" + saveFile.getAbsolutePath());
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, "Export failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            // List selection subpanel
+            JPanel listPanel = new JPanel();
+            listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
+            listPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+            // Dynamic checkboxes referencing back to our configs map list
+            List<JCheckBox> checkBoxes = new ArrayList<>();
+            for (Configuration config : allConfigs) {
+                JCheckBox checkBox = new JCheckBox(config.getName() + " (" + config.getLanguage() + ")");
+                checkBox.setSelected(true); // Pre-check all by default
+                listPanel.add(checkBox);
+                checkBoxes.add(checkBox);
+            }
+
+            JScrollPane scrollPane = new JScrollPane(listPanel);
+            exportDialog.add(scrollPane, BorderLayout.CENTER);
+
+            // Dialog Confirmation Buttons
+            JPanel actionButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+            JButton btnConfirm = new JButton("Export Selected");
+            JButton btnCancel = new JButton("Cancel");
+
+            final boolean[] confirmed = { false };
+
+            btnConfirm.addActionListener(evt -> {
+                confirmed[0] = true;
+                exportDialog.dispose();
+            });
+            btnCancel.addActionListener(evt -> exportDialog.dispose());
+
+            actionButtonPanel.add(btnConfirm);
+            actionButtonPanel.add(btnCancel);
+            exportDialog.add(actionButtonPanel, BorderLayout.SOUTH);
+
+            // Render configuration list modal
+            exportDialog.setVisible(true);
+
+            // 2. Process selection logic upon direct user confirmation
+            if (confirmed[0]) {
+                List<Configuration> selectedConfigs = new ArrayList<>();
+                for (int i = 0; i < checkBoxes.size(); i++) {
+                    if (checkBoxes.get(i).isSelected()) {
+                        selectedConfigs.add(allConfigs.get(i));
+                    }
+                }
+
+                if (selectedConfigs.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "No configurations were selected for export.", "Export Cancelled", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                // 3. Fall back to your native file selection pipeline
+                JFileChooser fileChooser = new JFileChooser();
+                fileChooser.setDialogTitle("Export Configurations");
+                fileChooser.setSelectedFile(new File("exported_configs.json"));
+                fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON Files (*.json)", "json"));
+
+                if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                    File saveFile = fileChooser.getSelectedFile();
+
+                    // Auto-append .json extension if absent
+                    if (!saveFile.getName().toLowerCase().endsWith(".json")) {
+                        saveFile = new File(saveFile.getAbsolutePath() + ".json");
+                    }
+
+                    try {
+                        // Pass filtered subset directly into your persistent storage engine framework
+                        configStore.saveTo(saveFile, selectedConfigs);
+                        JOptionPane.showMessageDialog(this, "Configurations exported successfully to:\n" + saveFile.getAbsolutePath());
+                    } catch (Exception ex) {
+                        JOptionPane.showMessageDialog(this, "Export failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                    }
                 }
             }
         });
@@ -1814,6 +1881,106 @@ public class IAEGui extends JFrame {
         panel.add(contentWrapper, BorderLayout.CENTER);
 
         return panel;
+    }
+
+    private void handleExportConfigurations(List<Configuration> configurations) {
+        if (configurations == null || configurations.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No configurations available to export.", "Export Info", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        // 1. Create the modal selection window
+        JDialog exportDialog = new JDialog(this, "Select configurations to export", true);
+        exportDialog.setLayout(new BorderLayout(10, 10));
+        exportDialog.setSize(400, 300);
+        exportDialog.setLocationRelativeTo(this);
+
+        // Panel to hold the list of checkboxes
+        JPanel listPanel = new JPanel();
+        listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
+        listPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        // Maintain a map or parallel list linking checkboxes to configurations
+        List<JCheckBox> checkBoxes = new ArrayList<>();
+        for (Configuration config : configurations) {
+            JCheckBox checkBox = new JCheckBox(config.getName() + " (" + config.getLanguage() + ")");
+            checkBox.setSelected(true); // Default to selected
+            listPanel.add(checkBox);
+            checkBoxes.add(checkBox);
+        }
+
+        JScrollPane scrollPane = new JScrollPane(listPanel);
+        exportDialog.add(scrollPane, BorderLayout.CENTER);
+
+        // 2. Control Buttons Panel
+        JPanel actionButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton btnConfirm = new JButton("Export Selected");
+        JButton btnCancel = new JButton("Cancel");
+
+        // Flag to track confirmation state
+        final boolean[] confirmed = { false };
+
+        btnConfirm.addActionListener(e -> {
+            confirmed[0] = true;
+            exportDialog.dispose();
+        });
+
+        btnCancel.addActionListener(e -> exportDialog.dispose());
+
+        actionButtonPanel.add(btnConfirm);
+        actionButtonPanel.add(btnCancel);
+        exportDialog.add(actionButtonPanel, BorderLayout.SOUTH);
+
+        // Display the configuration selection dialog
+        exportDialog.setVisible(true);
+
+        // 3. Process the selections if the user clicked "Export Selected"
+        if (confirmed[0]) {
+            List<Configuration> selectedConfigs = new ArrayList<>();
+            for (int i = 0; i < checkBoxes.size(); i++) {
+                if (checkBoxes.get(i).isSelected()) {
+                    selectedConfigs.add(configurations.get(i));
+                }
+            }
+
+            if (selectedConfigs.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "No configurations were selected for export.", "Export Cancelled", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            // 4. File Chooser to select destination path
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Save Configurations File");
+            fileChooser.setSelectedFile(new File("configs.json"));
+            fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON Files (*.json)", "json"));
+
+            int userSelection = fileChooser.showSaveDialog(this);
+            if (userSelection == JFileChooser.APPROVE_OPTION) {
+                File fileToSave = fileChooser.getSelectedFile();
+
+                // Ensure proper file extension
+                if (!fileToSave.getName().toLowerCase().endsWith(".json")) {
+                    fileToSave = new File(fileToSave.getAbsolutePath() + ".json");
+                }
+
+                try {
+                    // Formats components explicitly using the JSON schema provided by ConfigStore and JsonUtil
+                    List<String> jsonObjects = new ArrayList<>();
+                    for (Configuration c : selectedConfigs) {
+                        jsonObjects.add(c.toJson());
+                    }
+                    String content = JsonUtil.encodeArray(jsonObjects);
+
+                    // Write the raw content byte stream to file safely
+                    java.nio.file.Files.write(fileToSave.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+                    JOptionPane.showMessageDialog(this, "Configurations successfully exported to:\n" + fileToSave.getAbsolutePath(), "Export Successful", JOptionPane.INFORMATION_MESSAGE);
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                    JOptionPane.showMessageDialog(this, "Failed to save configurations:\n" + ex.getMessage(), "Export Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }
     }
 
     private class ActionButtonRenderer extends DefaultTableCellRenderer {
