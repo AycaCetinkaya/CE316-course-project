@@ -35,6 +35,17 @@ public class ProjectRunnerService {
                               Configuration selectedConfig,
                               ProgressListener progressListener,
                               String comparatorType) throws ZipServiceException {
+        return runProject(projectName, submissionsDir, testCases, selectedConfig,
+                progressListener, comparatorType, Project.DEFAULT_TIMEOUT_SECONDS);
+    }
+
+    public Project runProject(String projectName,
+                              File submissionsDir,
+                              List<TestCase> testCases,
+                              Configuration selectedConfig,
+                              ProgressListener progressListener,
+                              String comparatorType,
+                              int timeoutSeconds) throws ZipServiceException {
 
         DatabaseManager db = new DatabaseManager();
         long projectId = -1;
@@ -54,7 +65,7 @@ public class ProjectRunnerService {
         ZipService zipService = new ZipService();
         List<StudentZipSubmission> submissions = zipService.extractAll(submissionsDir);
 
-        EvaluationService evaluationService = new EvaluationService(createComparator(comparatorType));
+        EvaluationService evaluationService = new EvaluationService(createComparator(comparatorType), timeoutSeconds);
 
         try {
             for (int i = 0; i < submissions.size(); i++) {
@@ -121,6 +132,7 @@ public class ProjectRunnerService {
         );
         resultProject.setId(projectId);
         resultProject.setComparatorType(comparatorType);
+        resultProject.setTimeoutSeconds(timeoutSeconds);
         return resultProject;
     }
 

@@ -15,6 +15,11 @@ public class EvaluationService {
         this.comparator = comparator == null ? new ExactMatchComparator() : comparator;
     }
 
+    public EvaluationService(OutputComparator comparator, long timeoutSeconds) {
+        this.evaluator = new Evaluator(timeoutSeconds);
+        this.comparator = comparator == null ? new ExactMatchComparator() : comparator;
+    }
+
     public void evaluateProject(Project project) {
 
         Configuration config = project.getConfiguration();

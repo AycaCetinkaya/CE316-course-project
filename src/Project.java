@@ -4,6 +4,8 @@ public class Project {
     public static final String COMPARATOR_EXACT_MATCH = "Exact Match";
     public static final String COMPARATOR_WHITESPACE_INSENSITIVE = "Whitespace Insensitive";
 
+    public static final int DEFAULT_TIMEOUT_SECONDS = 30;
+
     private String name;
     private long id;
     private Configuration configuration;
@@ -11,6 +13,7 @@ public class Project {
     private List<TestCase> testCases;
     private long lastModified;
     private String comparatorType;
+    private int timeoutSeconds;
 
     public Project(String name, Configuration configuration,
                    List<StudentZipSubmission> submissions,
@@ -22,6 +25,7 @@ public class Project {
         this.testCases = testCases;
         this.lastModified = 0L;
         this.comparatorType = COMPARATOR_EXACT_MATCH;
+        this.timeoutSeconds = DEFAULT_TIMEOUT_SECONDS;
     }
 
     public String getName() { return name; }
@@ -44,5 +48,13 @@ public class Project {
         } else {
             this.comparatorType = comparatorType;
         }
+    }
+
+    public int getTimeoutSeconds() {
+        return timeoutSeconds;
+    }
+
+    public void setTimeoutSeconds(int timeoutSeconds) {
+        this.timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : DEFAULT_TIMEOUT_SECONDS;
     }
 }

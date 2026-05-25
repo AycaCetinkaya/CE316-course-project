@@ -31,6 +31,7 @@ public class IAEGui extends JFrame {
     private JTextField txtProjectName;
     private JComboBox<String> cmbConfiguration;
     private JComboBox<String> cmbComparator;
+    private JSpinner spnTimeout;
     private DefaultTableModel testCaseTableModel;
     private JTextField txtSubmissionsFolder;
     private final Map<String, ProjectFilePaths> projectPathsByName = new HashMap<>();
@@ -61,7 +62,7 @@ public class IAEGui extends JFrame {
         if (this.allConfigs.isEmpty()) {
             allConfigs.add(new Configuration("C Config", "C", "gcc *.c -o main", "./main", ".c", "int\\s+main"));
             allConfigs.add(new Configuration("Java Config", "JAVA", "javac *.java", "java $MAIN", ".java", "public\\s+static\\s+void\\s+main"));
-            allConfigs.add(new Configuration("Python Config", "PYTHON", "echo skip", "python3 $MAIN", ".py", "if\\s+__name__\\s*==.*main"));
+            allConfigs.add(new Configuration("Python Config", "PYTHON", "", "python3 $MAIN", ".py", "if\\s+__name__\\s*==.*main"));
             allConfigs.add(new Configuration("Haskell Config", "HASKELL", "ghc --make $MAIN -o main", "./main", ".hs", "\\bmain\\s*[:=]"));
             for (Configuration c : allConfigs) {
                 persistConfigurationToDb(c);
@@ -1062,8 +1063,8 @@ public class IAEGui extends JFrame {
         content.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel projectInfoCard = createCardPanel();
-        projectInfoCard.setMaximumSize(new Dimension(720, 285));
-        projectInfoCard.setPreferredSize(new Dimension(720, 285));
+        projectInfoCard.setMaximumSize(new Dimension(720, 360));
+        projectInfoCard.setPreferredSize(new Dimension(720, 360));
         projectInfoCard.setLayout(new BoxLayout(projectInfoCard, BoxLayout.Y_AXIS));
 
         txtProjectName = createTextField("e.g., Data Structures - Assignment 1");
@@ -1091,6 +1092,29 @@ public class IAEGui extends JFrame {
         cmbComparator.setFont(FONT_BODY);
         cmbComparator.setBackground(Color.WHITE);
 
+        spnTimeout = new JSpinner(new SpinnerNumberModel(
+                Project.DEFAULT_TIMEOUT_SECONDS, 1, 600, 5));
+        spnTimeout.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        spnTimeout.setPreferredSize(new Dimension(0, 38));
+        spnTimeout.setFont(FONT_BODY);
+
+        JButton btnNewConfig = createSecondaryButton("+ New");
+        btnNewConfig.setPreferredSize(new Dimension(90, 38));
+        btnNewConfig.addActionListener(e -> showConfigForm(null, created -> {
+            updateConfigDropdown();
+            if (cmbConfiguration != null && created != null) {
+                cmbConfiguration.setSelectedItem(created.getName());
+            }
+        }));
+
+        JPanel configRow = new JPanel(new BorderLayout(8, 0));
+        configRow.setBackground(BG_CARD);
+        configRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        configRow.setPreferredSize(new Dimension(0, 38));
+        configRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        configRow.add(cmbConfiguration, BorderLayout.CENTER);
+        configRow.add(btnNewConfig, BorderLayout.EAST);
+
         projectInfoCard.add(createSectionTitle("▤  Project Information"));
         projectInfoCard.add(Box.createVerticalStrut(14));
         projectInfoCard.add(createLabel("Project Name"));
@@ -1099,12 +1123,17 @@ public class IAEGui extends JFrame {
         projectInfoCard.add(Box.createVerticalStrut(14));
         projectInfoCard.add(createLabel("Configuration"));
         projectInfoCard.add(Box.createVerticalStrut(6));
-        projectInfoCard.add(cmbConfiguration);
+        projectInfoCard.add(configRow);
 
         projectInfoCard.add(Box.createVerticalStrut(14));
         projectInfoCard.add(createLabel("Output Comparator"));
         projectInfoCard.add(Box.createVerticalStrut(6));
         projectInfoCard.add(cmbComparator);
+
+        projectInfoCard.add(Box.createVerticalStrut(14));
+        projectInfoCard.add(createLabel("Timeout per run (seconds)"));
+        projectInfoCard.add(Box.createVerticalStrut(6));
+        projectInfoCard.add(spnTimeout);
 
         JPanel filesCard = createCardPanel();
         filesCard.setMaximumSize(new Dimension(720, Integer.MAX_VALUE));
@@ -1393,6 +1422,9 @@ public class IAEGui extends JFrame {
         final String comparatorType = cmbComparator == null || cmbComparator.getSelectedItem() == null
                 ? Project.COMPARATOR_EXACT_MATCH
                 : cmbComparator.getSelectedItem().toString();
+        final int timeoutSeconds = spnTimeout == null
+                ? Project.DEFAULT_TIMEOUT_SECONDS
+                : ((Number) spnTimeout.getValue()).intValue();
 
         if (projectName.isEmpty() || submissionsPath.isEmpty() || selected == null) {
             JOptionPane.showMessageDialog(this, "Please fill project name and submissions folder.");
@@ -1430,7 +1462,8 @@ public class IAEGui extends JFrame {
                                     );
                                 }
                             },
-                            comparatorType
+                            comparatorType,
+                            timeoutSeconds
                     );
                 },
                 project -> {
@@ -1441,6 +1474,7 @@ public class IAEGui extends JFrame {
                     }
                     currentProject = project;
                     currentProject.setComparatorType(comparatorType);
+                    currentProject.setTimeoutSeconds(timeoutSeconds);
                     rememberProjectPaths(projectName, "", "", submissionsPath);
 
                     JOptionPane.showMessageDialog(this, "Project evaluated successfully.");
@@ -1487,6 +1521,7 @@ public class IAEGui extends JFrame {
         final List<TestCase> testCases = currentProject.getTestCases();
         final Configuration projectConfig = currentProject.getConfiguration();
         final String comparatorType = currentProject.getComparatorType();
+        final int timeoutSeconds = currentProject.getTimeoutSeconds();
 
         runEvaluationAsync(
                 "Re-running '" + projectName + "', please wait...",
@@ -1498,7 +1533,8 @@ public class IAEGui extends JFrame {
                             testCases,
                             projectConfig,
                             null,
-                            comparatorType
+                            comparatorType,
+                            timeoutSeconds
                     );
 
                     DatabaseManager db = new DatabaseManager();
@@ -1665,6 +1701,8 @@ public class IAEGui extends JFrame {
     private void clearCreateProjectForm() {
         resetPlaceholder(txtProjectName, "e.g., Data Structures - Assignment 1");
         cmbConfiguration.setSelectedIndex(0);
+        if (cmbComparator != null) cmbComparator.setSelectedIndex(0);
+        if (spnTimeout != null) spnTimeout.setValue(Project.DEFAULT_TIMEOUT_SECONDS);
         testCaseTableModel.setRowCount(0);
         resetPlaceholder(txtSubmissionsFolder, "Select folder containing ZIP files...");
     }
@@ -2144,6 +2182,10 @@ public class IAEGui extends JFrame {
     }
 
     private void showConfigForm(Configuration config) {
+        showConfigForm(config, null);
+    }
+
+    private void showConfigForm(Configuration config, java.util.function.Consumer<Configuration> onSaved) {
         JDialog dialog = new JDialog((Frame)null, config == null ? "Add Configuration" : "Edit Configuration", true);
         dialog.setLayout(new BorderLayout());
 
@@ -2180,7 +2222,13 @@ public class IAEGui extends JFrame {
             allConfigs.add(newConfig);
             persistConfigurationToDb(newConfig);
             dialog.dispose();
-            refreshConfigPage();
+
+            if (onSaved != null) {
+                allConfigs = loadConfigurationsFromDb();
+                onSaved.accept(newConfig);
+            } else {
+                refreshConfigPage();
+            }
         });
 
         JScrollPane formScroll = new JScrollPane(formPanel);
@@ -2189,10 +2237,24 @@ public class IAEGui extends JFrame {
         formScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         formScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 
+        btnSave.setPreferredSize(new Dimension(190, 40));
+        btnSave.setOpaque(true);
+        btnSave.setContentAreaFilled(true);
+        btnSave.setBorderPainted(false);
+
+        JButton btnCancelConfig = createSecondaryButton("Cancel");
+        btnCancelConfig.setPreferredSize(new Dimension(110, 40));
+        btnCancelConfig.addActionListener(e -> dialog.dispose());
+
+        JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
+        buttonBar.setBackground(Color.WHITE);
+        buttonBar.setBorder(new MatteBorder(1, 0, 0, 0, BORDER_COLOR));
+        buttonBar.add(btnCancelConfig);
+        buttonBar.add(btnSave);
+
         dialog.add(formScroll, BorderLayout.CENTER);
-        dialog.add(btnSave, BorderLayout.SOUTH);
-        dialog.pack();
-        dialog.setSize(new Dimension(520, Math.min(dialog.getHeight() + 40, 520)));
+        dialog.add(buttonBar, BorderLayout.SOUTH);
+        dialog.setSize(540, 440);
         dialog.setLocationRelativeTo(null);
         dialog.setVisible(true);
     }

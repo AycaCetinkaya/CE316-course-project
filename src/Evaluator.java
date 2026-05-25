@@ -12,15 +12,24 @@ public class Evaluator {
         this.executor = executor;
     }
 
+    public Evaluator(long timeoutSeconds) {
+        this.executor = new CommandExecutor(timeoutSeconds);
+    }
+
     public CommandResult compile(StudentZipSubmission submission,
                                  Configuration config) throws EvaluatorException {
 
         validateSubmissionAndConfig(submission, config);
 
+        String compileCommand = config.getCompileCommand();
+        if (compileCommand == null || compileCommand.trim().isEmpty()) {
+            return new CommandResult(0, "", "");
+        }
+
         File workingDirectory = submission.getExtractedFolder();
 
         return executor.execute(
-                config.getCompileCommand(),
+                compileCommand,
                 workingDirectory
         );
     }
@@ -91,12 +100,6 @@ public class Evaluator {
             throw new EvaluatorException(
                     "Extracted folder does not exist: " + workingDirectory.getAbsolutePath()
             );
-        }
-
-        String compileCommand = config.getCompileCommand();
-
-        if (compileCommand == null || compileCommand.trim().isEmpty()) {
-            throw new EvaluatorException("Configuration has no compile command");
         }
 
         String runCommand = config.getRunCommand();

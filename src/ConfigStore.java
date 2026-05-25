@@ -31,7 +31,7 @@ public class ConfigStore {
                 ".java",
                 "public\\s+static\\s+void\\s+main"
         ));
-        defaults.add(new Configuration("Python Default", "PYTHON", "echo skip", "python3 $MAIN", ".py", "if\\s+__name__\\s*==\\s*[\"']__main__[\"']"));
+        defaults.add(new Configuration("Python Default", "PYTHON", "", "python3 $MAIN", ".py", "if\\s+__name__\\s*==\\s*[\"']__main__[\"']"));
         defaults.add(new Configuration(
                 "C Default",
                 "C",

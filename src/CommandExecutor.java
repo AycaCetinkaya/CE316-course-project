@@ -7,7 +7,17 @@ import java.util.concurrent.TimeUnit;
 
 public class CommandExecutor {
 
-    private static final long TIMEOUT_SECONDS = 10;
+    private static final long DEFAULT_TIMEOUT_SECONDS = 30;
+
+    private final long timeoutSeconds;
+
+    public CommandExecutor() {
+        this(DEFAULT_TIMEOUT_SECONDS);
+    }
+
+    public CommandExecutor(long timeoutSeconds) {
+        this.timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : DEFAULT_TIMEOUT_SECONDS;
+    }
 
     public CommandResult execute(String command, File workingDirectory) {
         StringBuilder output = new StringBuilder();
@@ -39,7 +49,7 @@ public class CommandExecutor {
             outputThread.start();
             errorThread.start();
 
-            boolean finished = process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
 
             if (!finished) {
                 process.destroyForcibly();
@@ -50,7 +60,7 @@ public class CommandExecutor {
                 return new CommandResult(
                         -2,
                         output.toString(),
-                        error + "Process timed out after " + TIMEOUT_SECONDS + " seconds."
+                        error + "Process timed out after " + timeoutSeconds + " seconds."
                 );
             }
 
