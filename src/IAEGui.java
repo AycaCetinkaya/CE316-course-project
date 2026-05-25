@@ -2206,11 +2206,91 @@ public class IAEGui extends JFrame {
         formPanel.add(new JLabel("Source Extension:")); formPanel.add(extField);
         formPanel.add(new JLabel("Entry Pattern (Regex):")); formPanel.add(patternField);
 
+        // Error label for inline validation messages
+        JLabel errorLabel = new JLabel(" ");
+        errorLabel.setForeground(new Color(220, 38, 38)); // Matching the red used elsewhere in the UI
+        errorLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
+        errorLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        errorLabel.setBorder(new EmptyBorder(10, 10, 5, 10));
+
         JButton btnSave = createStyledButton("Save Configuration", true);
         btnSave.addActionListener(e -> {
+            String newName = nameField.getText().trim();
+            String newLang = langField.getText().trim();
+            String newCompileCmd = compileField.getText().trim();
+            String newRunCmd = runField.getText().trim();
+            String newExt = extField.getText().trim();
+            String newPattern = patternField.getText().trim();
+
+            // --- 1. Validate Configuration Name ---
+            if (newName.isEmpty()) {
+                errorLabel.setText("Configuration name cannot be empty.");
+                return;
+            }
+            if (newName.length() > 50) {
+                errorLabel.setText("Configuration name cannot exceed 50 characters.");
+                return;
+            }
+            if (newName.matches(".*[\\\\/:*?\"<>|].*")) {
+                errorLabel.setText("Configuration name contains invalid characters (\\ / : * ? \" < > |).");
+                return;
+            }
+
+            boolean nameExists = false;
+            for (Configuration existing : allConfigs) {
+                if (existing.getName().equalsIgnoreCase(newName)) {
+                    if (config == null || !existing.getName().equalsIgnoreCase(config.getName())) {
+                        nameExists = true;
+                        break;
+                    }
+                }
+            }
+            if (nameExists) {
+                errorLabel.setText("A configuration with this name already exists. Please choose a unique name.");
+                return;
+            }
+
+            // --- 2. Validate Language Name ---
+            if (newLang.isEmpty()) {
+                errorLabel.setText("Language name can not be null.");
+                return;
+            }
+            if (newLang.length() > 50) {
+                errorLabel.setText("Language name cannot exceed 50 characters.");
+                return;
+            }
+            if (newLang.matches(".*[\\\\/:*?\"<>|].*")) {
+                errorLabel.setText("Language name contains invalid characters (\\ / : * ? \" < > |).");
+                return;
+            }
+
+            // --- 3. Validate Run Command ---
+            if (newRunCmd.isEmpty()) {
+                errorLabel.setText("Run command can not be null.");
+                return;
+            }
+
+            // --- 4. Validate Source Extension (Format, Boundaries, and Wildcards) ---
+            if (!newExt.startsWith(".")) {
+                errorLabel.setText("Extension must start with a full stop (e.g., '.java').");
+                return;
+            }
+            if (newExt.length() < 2 || newExt.length() > 6) {
+                errorLabel.setText("Extension total length must be between 2 and 6 characters.");
+                return;
+            }
+            // Ensure characters following the dot are strictly alphanumeric (No wildcards like *, ?, spaces or symbols)
+            String extensionBody = newExt.substring(1);
+            if (!extensionBody.matches("[a-zA-Z0-9]+")) {
+                errorLabel.setText("Extension body can only contain alphanumeric characters (no wildcards or symbols).");
+                return;
+            }
+
+            // If all validations pass, clear the error message and proceed
+            errorLabel.setText(" ");
+
             Configuration newConfig = new Configuration(
-                    nameField.getText(), langField.getText(), compileField.getText(),
-                    runField.getText(), extField.getText(), patternField.getText()
+                    newName, newLang, newCompileCmd, newRunCmd, newExt, newPattern
             );
 
             if (config != null) {
@@ -2248,13 +2328,20 @@ public class IAEGui extends JFrame {
 
         JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
         buttonBar.setBackground(Color.WHITE);
-        buttonBar.setBorder(new MatteBorder(1, 0, 0, 0, BORDER_COLOR));
         buttonBar.add(btnCancelConfig);
         buttonBar.add(btnSave);
 
+        // Wrapper panel to hold the error label and the buttons at the bottom
+        JPanel bottomPanel = new JPanel(new BorderLayout());
+        bottomPanel.setBackground(Color.WHITE);
+        bottomPanel.setBorder(new MatteBorder(1, 0, 0, 0, BORDER_COLOR));
+        bottomPanel.add(errorLabel, BorderLayout.NORTH);
+        bottomPanel.add(buttonBar, BorderLayout.SOUTH);
+
         dialog.add(formScroll, BorderLayout.CENTER);
-        dialog.add(buttonBar, BorderLayout.SOUTH);
-        dialog.setSize(540, 440);
+        dialog.add(bottomPanel, BorderLayout.SOUTH);
+
+        dialog.setSize(540, 470);
         dialog.setLocationRelativeTo(null);
         dialog.setVisible(true);
     }
