@@ -1776,10 +1776,13 @@ public class IAEGui extends JFrame {
                     return;
                 }
 
-                // 3. Fall back to your native file selection pipeline
+                // 3. Fall back to your native file selection pipeline with dynamic date filename
+                String dateSuffix = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("ddMMyy"));
+                String defaultFilename = "iae-configs-" + dateSuffix + ".json";
+
                 JFileChooser fileChooser = new JFileChooser();
                 fileChooser.setDialogTitle("Export Configurations");
-                fileChooser.setSelectedFile(new File("exported_configs.json"));
+                fileChooser.setSelectedFile(new File(defaultFilename));
                 fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON Files (*.json)", "json"));
 
                 if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
@@ -1948,10 +1951,13 @@ public class IAEGui extends JFrame {
                 return;
             }
 
-            // 4. File Chooser to select destination path
+            // 4. File Chooser to select destination path with dynamic date filename
+            String dateSuffix = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
+            String defaultFilename = "iae-configs-" + dateSuffix + ".json";
+
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setDialogTitle("Save Configurations File");
-            fileChooser.setSelectedFile(new File("configs.json"));
+            fileChooser.setSelectedFile(new File(defaultFilename));
             fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON Files (*.json)", "json"));
 
             int userSelection = fileChooser.showSaveDialog(this);
