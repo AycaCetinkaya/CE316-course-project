@@ -151,4 +151,112 @@ public class ConfigStore {
 
         return projectLocal;
     }
+
+    public static class ImportResult {
+        public final List<Configuration> validConfigsWithoutConflict = new ArrayList<>();
+        public final List<Configuration> conflictingConfigs = new ArrayList<>();
+        public final List<String> rejectedReasons = new ArrayList<>();
+    }
+
+    public ImportResult processImportFile(File file, List<Configuration> allConfigs) throws IOException {
+        ImportResult result = new ImportResult();
+        String json = Files.readString(file.toPath(), StandardCharsets.UTF_8).trim();
+
+        if (!json.startsWith("[") || !json.endsWith("]")) {
+            result.rejectedReasons.add("Root structure error: The file must be a valid JSON Array enclosed in [ ].");
+            return result;
+        }
+
+        List<String> rawObjects = new ArrayList<>();
+        int braceCount = 0;
+        int startIndex = -1;
+        boolean insideQuotes = false;
+
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
+                insideQuotes = !insideQuotes;
+            }
+            if (!insideQuotes) {
+                if (c == '{') {
+                    if (braceCount == 0) {
+                        startIndex = i;
+                    }
+                    braceCount++;
+                } else if (c == '}') {
+                    braceCount--;
+                    if (braceCount == 0 && startIndex != -1) {
+                        rawObjects.add(json.substring(startIndex, i + 1));
+                        startIndex = -1;
+                    }
+                }
+            }
+        }
+
+        if (rawObjects.isEmpty()) {
+            result.rejectedReasons.add("The file contains no distinct configuration blocks.");
+            return result;
+        }
+
+        for (String objectStr : rawObjects) {
+            try {
+                Configuration incoming = Configuration.fromJson(objectStr);
+
+                if (incoming.getName() == null || incoming.getName().trim().isEmpty() ||
+                        incoming.getName().trim().length() > 50 || incoming.getName().trim().matches(".*[\\\\/:*?\"<>|].*") ||
+                        incoming.getLanguage() == null || incoming.getLanguage().trim().isEmpty() ||
+                        incoming.getLanguage().trim().length() > 50 || incoming.getLanguage().trim().matches(".*[\\\\/:*?\"<>|].*") ||
+                        incoming.getRunCommand() == null || incoming.getRunCommand().trim().isEmpty() ||
+                        incoming.getSourceExtension() == null || !incoming.getSourceExtension().trim().startsWith(".") ||
+                        incoming.getSourceExtension().trim().length() < 2 || incoming.getSourceExtension().trim().length() > 6) {
+
+                    String identifierName = (incoming.getName() != null && !incoming.getName().isEmpty()) ? incoming.getName() : "Unnamed Entry";
+                    result.rejectedReasons.add("- '" + identifierName + "' (Violated identity constraints, length boundaries, or missing mandatory values)");
+                    continue;
+                }
+
+                incoming.setName(incoming.getName().trim());
+                incoming.setLanguage(incoming.getLanguage().trim());
+                incoming.setCompileCommand(incoming.getCompileCommand() != null ? incoming.getCompileCommand().trim() : "");
+                incoming.setRunCommand(incoming.getRunCommand().trim());
+                incoming.setSourceExtension(incoming.getSourceExtension().trim());
+                incoming.setEntryPointPattern(incoming.getEntryPointPattern() != null ? incoming.getEntryPointPattern().trim() : "");
+
+                String extensionBody = incoming.getSourceExtension().substring(1);
+                if (!extensionBody.matches("[a-zA-Z0-9]+")) {
+                    result.rejectedReasons.add("- '" + incoming.getName() + "' (Extension contains wildcards or non-alphanumeric characters)");
+                    continue;
+                }
+
+                boolean conflictDetected = false;
+                for (Configuration localConfig : allConfigs) {
+                    if (localConfig.getName().equalsIgnoreCase(incoming.getName())) {
+                        conflictDetected = true;
+                        break;
+                    }
+                }
+
+                if (conflictDetected) {
+                    result.conflictingConfigs.add(incoming);
+                } else {
+                    result.validConfigsWithoutConflict.add(incoming);
+                }
+
+            } catch (Exception ex) {
+                result.rejectedReasons.add("- Fragment parse fail (Invalid JSON formatting syntax layout inside item block)");
+            }
+        }
+        return result;
+    }
+
+    public boolean checkNameCollision(String proposedName, List<Configuration> currentCollection) {
+        if (proposedName == null) return false;
+        String normalized = proposedName.trim();
+        for (Configuration config : currentCollection) {
+            if (config.getName().equalsIgnoreCase(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

@@ -1732,21 +1732,33 @@ public class IAEGui extends JFrame {
             if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                 File selectedFile = fileChooser.getSelectedFile();
                 try {
-                    List<Configuration> importedConfigs = configStore.loadFrom(selectedFile);
+                    ConfigStore.ImportResult importResult = configStore.processImportFile(selectedFile, allConfigs);
 
-                    if (importedConfigs != null && !importedConfigs.isEmpty()) {
-                        allConfigs.addAll(importedConfigs);
-                        for (Configuration imported : importedConfigs) {
-                            persistConfigurationToDb(imported);
+                    if (!importResult.rejectedReasons.isEmpty()) {
+                        StringBuilder warnings = new StringBuilder("Rejected configurations that failed system constraints:\n\n");
+                        for (String reason : importResult.rejectedReasons) {
+                            warnings.append(reason).append("\n");
                         }
-                        refreshConfigPage();
-
-                        JOptionPane.showMessageDialog(this, importedConfigs.size() + " configurations imported.");
-                    } else {
-                        JOptionPane.showMessageDialog(this, "The file is empty or invalid.", "Error", JOptionPane.ERROR_MESSAGE);
+                        JOptionPane.showMessageDialog(this, warnings.toString(), "Validation Alert", JOptionPane.WARNING_MESSAGE);
                     }
+
+                    int safeSavedCount = 0;
+                    for (Configuration safeConfig : importResult.validConfigsWithoutConflict) {
+                        allConfigs.add(safeConfig);
+                        persistConfigurationToDb(safeConfig);
+                        safeSavedCount++;
+                    }
+
+                    if (!importResult.conflictingConfigs.isEmpty()) {
+                        renderImportConflictResolutionWindow(importResult.conflictingConfigs, safeSavedCount);
+                    } else if (safeSavedCount > 0) {
+                        allConfigs = loadConfigurationsFromDb();
+                        refreshConfigPage();
+                        JOptionPane.showMessageDialog(this, "Successfully loaded " + safeSavedCount + " configurations smoothly.", "Import Complete", JOptionPane.INFORMATION_MESSAGE);
+                    }
+
                 } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, "Import failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "Import operation failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 }
             }
         });
@@ -1757,22 +1769,19 @@ public class IAEGui extends JFrame {
                 return;
             }
 
-            // 1. Open up a modern modal window to select which configurations to extract
             JDialog exportDialog = new JDialog(this, "Select configurations to export", true);
             exportDialog.setLayout(new BorderLayout(10, 10));
             exportDialog.setSize(400, 300);
             exportDialog.setLocationRelativeTo(this);
 
-            // List selection subpanel
             JPanel listPanel = new JPanel();
             listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
             listPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-            // Dynamic checkboxes referencing back to our configs map list
             List<JCheckBox> checkBoxes = new ArrayList<>();
             for (Configuration config : allConfigs) {
                 JCheckBox checkBox = new JCheckBox(config.getName() + " (" + config.getLanguage() + ")");
-                checkBox.setSelected(true); // Pre-check all by default
+                checkBox.setSelected(true);
                 listPanel.add(checkBox);
                 checkBoxes.add(checkBox);
             }
@@ -1780,7 +1789,6 @@ public class IAEGui extends JFrame {
             JScrollPane scrollPane = new JScrollPane(listPanel);
             exportDialog.add(scrollPane, BorderLayout.CENTER);
 
-            // Dialog Confirmation Buttons
             JPanel actionButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
             JButton btnConfirm = new JButton("Export Selected");
             JButton btnCancel = new JButton("Cancel");
@@ -1797,10 +1805,8 @@ public class IAEGui extends JFrame {
             actionButtonPanel.add(btnCancel);
             exportDialog.add(actionButtonPanel, BorderLayout.SOUTH);
 
-            // Render configuration list modal
             exportDialog.setVisible(true);
 
-            // 2. Process selection logic upon direct user confirmation
             if (confirmed[0]) {
                 List<Configuration> selectedConfigs = new ArrayList<>();
                 for (int i = 0; i < checkBoxes.size(); i++) {
@@ -1814,7 +1820,6 @@ public class IAEGui extends JFrame {
                     return;
                 }
 
-                // 3. Fall back to your native file selection pipeline with dynamic date filename
                 String dateSuffix = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("ddMMyy"));
                 String defaultFilename = "iae-configs-" + dateSuffix + ".json";
 
@@ -1826,13 +1831,11 @@ public class IAEGui extends JFrame {
                 if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
                     File saveFile = fileChooser.getSelectedFile();
 
-                    // Auto-append .json extension if absent
                     if (!saveFile.getName().toLowerCase().endsWith(".json")) {
                         saveFile = new File(saveFile.getAbsolutePath() + ".json");
                     }
 
                     try {
-                        // Pass filtered subset directly into your persistent storage engine framework
                         configStore.saveTo(saveFile, selectedConfigs);
                         JOptionPane.showMessageDialog(this, "Configurations exported successfully to:\n" + saveFile.getAbsolutePath());
                     } catch (Exception ex) {
@@ -1930,22 +1933,19 @@ public class IAEGui extends JFrame {
             return;
         }
 
-        // 1. Create the modal selection window
         JDialog exportDialog = new JDialog(this, "Select configurations to export", true);
         exportDialog.setLayout(new BorderLayout(10, 10));
         exportDialog.setSize(400, 300);
         exportDialog.setLocationRelativeTo(this);
 
-        // Panel to hold the list of checkboxes
         JPanel listPanel = new JPanel();
         listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
         listPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Maintain a map or parallel list linking checkboxes to configurations
         List<JCheckBox> checkBoxes = new ArrayList<>();
         for (Configuration config : configurations) {
             JCheckBox checkBox = new JCheckBox(config.getName() + " (" + config.getLanguage() + ")");
-            checkBox.setSelected(true); // Default to selected
+            checkBox.setSelected(true);
             listPanel.add(checkBox);
             checkBoxes.add(checkBox);
         }
@@ -1953,12 +1953,10 @@ public class IAEGui extends JFrame {
         JScrollPane scrollPane = new JScrollPane(listPanel);
         exportDialog.add(scrollPane, BorderLayout.CENTER);
 
-        // 2. Control Buttons Panel
         JPanel actionButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton btnConfirm = new JButton("Export Selected");
         JButton btnCancel = new JButton("Cancel");
 
-        // Flag to track confirmation state
         final boolean[] confirmed = { false };
 
         btnConfirm.addActionListener(e -> {
@@ -1972,10 +1970,8 @@ public class IAEGui extends JFrame {
         actionButtonPanel.add(btnCancel);
         exportDialog.add(actionButtonPanel, BorderLayout.SOUTH);
 
-        // Display the configuration selection dialog
         exportDialog.setVisible(true);
 
-        // 3. Process the selections if the user clicked "Export Selected"
         if (confirmed[0]) {
             List<Configuration> selectedConfigs = new ArrayList<>();
             for (int i = 0; i < checkBoxes.size(); i++) {
@@ -1989,7 +1985,6 @@ public class IAEGui extends JFrame {
                 return;
             }
 
-            // 4. File Chooser to select destination path with dynamic date filename
             String dateSuffix = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
             String defaultFilename = "iae-configs-" + dateSuffix + ".json";
 
@@ -2002,20 +1997,17 @@ public class IAEGui extends JFrame {
             if (userSelection == JFileChooser.APPROVE_OPTION) {
                 File fileToSave = fileChooser.getSelectedFile();
 
-                // Ensure proper file extension
                 if (!fileToSave.getName().toLowerCase().endsWith(".json")) {
                     fileToSave = new File(fileToSave.getAbsolutePath() + ".json");
                 }
 
                 try {
-                    // Formats components explicitly using the JSON schema provided by ConfigStore and JsonUtil
                     List<String> jsonObjects = new ArrayList<>();
                     for (Configuration c : selectedConfigs) {
                         jsonObjects.add(c.toJson());
                     }
                     String content = JsonUtil.encodeArray(jsonObjects);
 
-                    // Write the raw content byte stream to file safely
                     java.nio.file.Files.write(fileToSave.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
                     JOptionPane.showMessageDialog(this, "Configurations successfully exported to:\n" + fileToSave.getAbsolutePath(), "Export Successful", JOptionPane.INFORMATION_MESSAGE);
@@ -2025,6 +2017,234 @@ public class IAEGui extends JFrame {
                 }
             }
         }
+    }
+
+    private void triggerConfigurationImportPipeline() {
+        JFileChooser browser = new JFileChooser();
+        browser.setDialogTitle("Import Configuration File");
+        browser.setFileFilter(new FileNameExtensionFilter("JSON Configuration Files (*.json)", "json"));
+
+        if (browser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        File sourceFile = browser.getSelectedFile();
+        try {
+            ConfigStore.ImportResult batchData = configStore.processImportFile(sourceFile, allConfigs);
+
+            if (!batchData.rejectedReasons.isEmpty()) {
+                StringBuilder errorLogs = new StringBuilder("Rejected elements that failed configuration validation rules:\n\n");
+                for (String reason : batchData.rejectedReasons) {
+                    errorLogs.append(reason).append("\n");
+                }
+                JOptionPane.showMessageDialog(this, errorLogs.toString(), "Validation Review", JOptionPane.WARNING_MESSAGE);
+            }
+
+            int cleanlySaved = 0;
+            for (Configuration safeConfig : batchData.validConfigsWithoutConflict) {
+                allConfigs.add(safeConfig);
+                persistConfigurationToDb(safeConfig);
+                cleanlySaved++;
+            }
+
+            if (!batchData.conflictingConfigs.isEmpty()) {
+                renderImportConflictResolutionWindow(batchData.conflictingConfigs, cleanlySaved);
+            } else if (cleanlySaved > 0) {
+                allConfigs = loadConfigurationsFromDb();
+                refreshConfigPage();
+                JOptionPane.showMessageDialog(this, "Configurations successfully imported: " + cleanlySaved, "Task Complete", JOptionPane.INFORMATION_MESSAGE);
+            }
+
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this, "Failed to read data stream from targeted file resource:\n" + ex.getMessage(), "IO Stream Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void renderImportConflictResolutionWindow(List<Configuration> conflicts, int safeCount) {
+        JDialog frame = new JDialog(this, "Resolve Identity Naming Conflicts", true);
+        frame.setLayout(new BorderLayout());
+        frame.setSize(640, 520);
+        frame.setLocationRelativeTo(this);
+
+        final int[] activeIndex = {0};
+        final int[] globalImportTracker = {safeCount};
+
+        JLabel progressHeader = new JLabel(" ");
+        progressHeader.setFont(new Font("SansSerif", Font.BOLD, 13));
+        progressHeader.setBorder(new EmptyBorder(12, 15, 5, 15));
+
+        JPanel comparisonPanel = new JPanel(new GridLayout(1, 2, 15, 0));
+        comparisonPanel.setBorder(new EmptyBorder(10, 15, 15, 15));
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
+        buttonPanel.setBackground(Color.WHITE);
+        buttonPanel.setBorder(new MatteBorder(1, 0, 0, 0, BORDER_COLOR));
+
+        JButton btnSkip = createSecondaryButton("Skip");
+        JButton btnOverwrite = createStyledButton("Overwrite", true);
+        JButton btnRename = createStyledButton("Rename", true);
+
+        buttonPanel.add(btnSkip);
+        buttonPanel.add(btnOverwrite);
+        buttonPanel.add(btnRename);
+
+        Runnable viewLoopStepper = new Runnable() {
+            @Override
+            public void run() {
+                if (activeIndex[0] >= conflicts.size()) {
+                    allConfigs = loadConfigurationsFromDb();
+                    refreshConfigPage();
+                    frame.dispose();
+                    JOptionPane.showMessageDialog(IAEGui.this, "Conflict evaluation finalized. Total configs recorded: " + globalImportTracker[0], "Process Complete", JOptionPane.INFORMATION_MESSAGE);
+                    return;
+                }
+
+                Configuration incomingItem = conflicts.get(activeIndex[0]);
+                progressHeader.setText(String.format("Collision %d of %d: Configuration identity '%s' already exists", (activeIndex[0] + 1), conflicts.size(), incomingItem.getName()));
+
+                Configuration activeDatabaseMatch = null;
+                for (Configuration localConfig : allConfigs) {
+                    if (localConfig.getName().equalsIgnoreCase(incomingItem.getName())) {
+                        activeDatabaseMatch = localConfig;
+                        break;
+                    }
+                }
+
+                comparisonPanel.removeAll();
+                comparisonPanel.add(buildComponentCardView("Incoming Payload Properties File", incomingItem, new Color(239, 246, 255), new Color(59, 130, 246)));
+                if (activeDatabaseMatch != null) {
+                    comparisonPanel.add(buildComponentCardView("Existing Record Parameter States", activeDatabaseMatch, new Color(249, 250, 251), new Color(107, 114, 128)));
+                }
+
+                comparisonPanel.revalidate();
+                comparisonPanel.repaint();
+            }
+        };
+
+        btnSkip.addActionListener(e -> {
+            Configuration item = conflicts.get(activeIndex[0]);
+            int select = JOptionPane.showConfirmDialog(frame, "Skip importing '" + item.getName() + "' and preserve database values?", "Confirm Skip", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (select == JOptionPane.YES_OPTION) {
+                activeIndex[0]++;
+                viewLoopStepper.run();
+            }
+        });
+
+        btnOverwrite.addActionListener(e -> {
+            Configuration incoming = conflicts.get(activeIndex[0]);
+            int select = JOptionPane.showConfirmDialog(frame, "Warning: Overwriting will permanently delete current database values for '" + incoming.getName() + "'. Continue?", "Confirm Overwrite", JOptionPane.YES_NO_OPTION, JOptionPane.ERROR_MESSAGE);
+
+            if (select == JOptionPane.YES_OPTION) {
+                Configuration oldRecord = null;
+                for (Configuration current : allConfigs) {
+                    if (current.getName().equalsIgnoreCase(incoming.getName())) {
+                        oldRecord = current;
+                        break;
+                    }
+                }
+                if (oldRecord != null) {
+                    allConfigs.remove(oldRecord);
+                    deleteConfigurationFromDb(oldRecord.getName());
+                }
+                allConfigs.add(incoming);
+                persistConfigurationToDb(incoming);
+                globalImportTracker[0]++;
+                activeIndex[0]++;
+                viewLoopStepper.run();
+            }
+        });
+
+        btnRename.addActionListener(e -> {
+            Configuration incoming = conflicts.get(activeIndex[0]);
+            String userEnteredName = null;
+            boolean loopPrompt = true;
+
+            while (loopPrompt) {
+                userEnteredName = (String) JOptionPane.showInputDialog(frame, "Enter a unique identity name for configuration '" + incoming.getName() + "':", "Rename Dynamic Identifier Conflict", JOptionPane.QUESTION_MESSAGE, null, null, incoming.getName() + "_Imported");
+
+                if (userEnteredName == null) {
+                    return;
+                }
+
+                userEnteredName = userEnteredName.trim();
+
+                if (userEnteredName.isEmpty() || userEnteredName.length() > 50 || userEnteredName.matches(".*[\\\\/:*?\"<>|].*")) {
+                    JOptionPane.showMessageDialog(frame, "Invalid input: Name is empty, exceeds 50 characters, or contains prohibited characters.", "Input Validation Error", JOptionPane.ERROR_MESSAGE);
+                    continue;
+                }
+
+                if (configStore.checkNameCollision(userEnteredName, allConfigs)) {
+                    JOptionPane.showMessageDialog(frame, "The name '" + userEnteredName + "' already exists in your workspace data rows.", "Name Collision Alert", JOptionPane.ERROR_MESSAGE);
+                } else {
+                    loopPrompt = false;
+                }
+            }
+
+            incoming.setName(userEnteredName);
+            allConfigs.add(incoming);
+            persistConfigurationToDb(incoming);
+            globalImportTracker[0]++;
+            activeIndex[0]++;
+            viewLoopStepper.run();
+        });
+
+        frame.add(progressHeader, BorderLayout.NORTH);
+        frame.add(comparisonPanel, BorderLayout.CENTER);
+        frame.add(buttonPanel, BorderLayout.SOUTH);
+
+        viewLoopStepper.run();
+        frame.setVisible(true);
+    }
+
+    private JPanel buildComponentCardView(String subHeading, Configuration c, Color surfaceBg, Color boundaryColor) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(surfaceBg);
+        panel.setBorder(new LineBorder(boundaryColor, 1, true));
+
+        JLabel sectionTitle = new JLabel(subHeading, SwingConstants.CENTER);
+        sectionTitle.setOpaque(true);
+        sectionTitle.setBackground(boundaryColor);
+        sectionTitle.setForeground(Color.WHITE);
+        sectionTitle.setFont(new Font("SansSerif", Font.BOLD, 12));
+        sectionTitle.setBorder(new EmptyBorder(6, 6, 6, 6));
+        panel.add(sectionTitle, BorderLayout.NORTH);
+
+        JPanel structureBody = new JPanel(new GridBagLayout());
+        structureBody.setOpaque(false);
+        structureBody.setBorder(new EmptyBorder(8, 8, 8, 8));
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.fill = GridBagConstraints.HORIZONTAL;
+        constraints.weightx = 1.0;
+        constraints.gridx = 0;
+        constraints.gridy = 0;
+        constraints.insets = new Insets(3, 2, 3, 2);
+
+        String[][] parametersTable = {
+                {"Config Name ID String:", c.getName()},
+                {"Language Target Category:", c.getLanguage()},
+                {"Compile Instructions Script:", c.getCompileCommand().isEmpty() ? "[None Defined]" : c.getCompileCommand()},
+                {"Runtime Script Command:", c.getRunCommand()},
+                {"Source Extension Type:", c.getSourceExtension()},
+                {"Main Processing Regex Entry Pattern:", c.getEntryPointPattern().isEmpty() ? "[None Specified]" : c.getEntryPointPattern()}
+        };
+
+        for (String[] lineRow : parametersTable) {
+            JLabel description = new JLabel(lineRow[0]);
+            description.setFont(new Font("SansSerif", Font.BOLD, 11));
+            description.setForeground(TEXT_SECONDARY);
+            structureBody.add(description, constraints);
+            constraints.gridy++;
+
+            JLabel parameterText = new JLabel(lineRow[1]);
+            parameterText.setFont(FONT_BODY);
+            parameterText.setForeground(TEXT_PRIMARY);
+            parameterText.setBorder(new EmptyBorder(0, 4, 6, 0));
+            structureBody.add(parameterText, constraints);
+            constraints.gridy++;
+        }
+
+        panel.add(new JScrollPane(structureBody), BorderLayout.CENTER);
+        return panel;
     }
 
     private class ActionButtonRenderer extends DefaultTableCellRenderer {
@@ -2053,10 +2273,8 @@ public class IAEGui extends JFrame {
             panel.btnCopy.addActionListener(e -> {
                 stopCellEditing();
                 if (currentConfig != null) {
-                    // Generate a unique duplicate name
                     String duplicateName = generateDuplicateName(currentConfig.getName());
 
-                    // Create the new cloned Configuration object
                     Configuration duplicatedConfig = new Configuration(
                             duplicateName,
                             currentConfig.getLanguage(),
@@ -2066,7 +2284,6 @@ public class IAEGui extends JFrame {
                             currentConfig.getEntryPointPattern()
                     );
 
-                    // Update runtime list, save to database, and refresh the UI layout
                     allConfigs.add(duplicatedConfig);
                     persistConfigurationToDb(duplicatedConfig);
                     refreshConfigPage();
@@ -2088,10 +2305,6 @@ public class IAEGui extends JFrame {
             });
         }
 
-        /**
-         * Loops through existing configurations to find a unique "Copy" name.
-         * Prevents duplicate keys if the user clicks copy multiple times.
-         */
         private String generateDuplicateName(String baseName) {
             String targetName = baseName + " (Copy)";
             int counter = 2;
@@ -2136,7 +2349,7 @@ public class IAEGui extends JFrame {
             setLayout(new FlowLayout(FlowLayout.CENTER, 8, 20));
             setBackground(Color.WHITE);
             styleActionButton(btnEdit, TEXT_PRIMARY);
-            styleActionButton(btnCopy, new Color(16, 185, 129)); // Clean Emerald Green for copy action
+            styleActionButton(btnCopy, new Color(16, 185, 129));
             styleActionButton(btnDelete, new Color(220, 38, 38));
             add(btnEdit);
             add(btnCopy);
@@ -2206,9 +2419,8 @@ public class IAEGui extends JFrame {
         formPanel.add(new JLabel("Source Extension:")); formPanel.add(extField);
         formPanel.add(new JLabel("Entry Pattern (Regex):")); formPanel.add(patternField);
 
-        // Error label for inline validation messages
         JLabel errorLabel = new JLabel(" ");
-        errorLabel.setForeground(new Color(220, 38, 38)); // Matching the red used elsewhere in the UI
+        errorLabel.setForeground(new Color(220, 38, 38));
         errorLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
         errorLabel.setHorizontalAlignment(SwingConstants.CENTER);
         errorLabel.setBorder(new EmptyBorder(10, 10, 5, 10));
@@ -2222,7 +2434,6 @@ public class IAEGui extends JFrame {
             String newExt = extField.getText().trim();
             String newPattern = patternField.getText().trim();
 
-            // --- 1. Validate Configuration Name ---
             if (newName.isEmpty()) {
                 errorLabel.setText("Configuration name cannot be empty.");
                 return;
@@ -2250,7 +2461,6 @@ public class IAEGui extends JFrame {
                 return;
             }
 
-            // --- 2. Validate Language Name ---
             if (newLang.isEmpty()) {
                 errorLabel.setText("Language name can not be null.");
                 return;
@@ -2264,13 +2474,11 @@ public class IAEGui extends JFrame {
                 return;
             }
 
-            // --- 3. Validate Run Command ---
             if (newRunCmd.isEmpty()) {
                 errorLabel.setText("Run command can not be null.");
                 return;
             }
 
-            // --- 4. Validate Source Extension (Format, Boundaries, and Wildcards) ---
             if (!newExt.startsWith(".")) {
                 errorLabel.setText("Extension must start with a full stop (e.g., '.java').");
                 return;
@@ -2279,14 +2487,12 @@ public class IAEGui extends JFrame {
                 errorLabel.setText("Extension total length must be between 2 and 6 characters.");
                 return;
             }
-            // Ensure characters following the dot are strictly alphanumeric (No wildcards like *, ?, spaces or symbols)
             String extensionBody = newExt.substring(1);
             if (!extensionBody.matches("[a-zA-Z0-9]+")) {
                 errorLabel.setText("Extension body can only contain alphanumeric characters (no wildcards or symbols).");
                 return;
             }
 
-            // If all validations pass, clear the error message and proceed
             errorLabel.setText(" ");
 
             Configuration newConfig = new Configuration(
@@ -2331,7 +2537,6 @@ public class IAEGui extends JFrame {
         buttonBar.add(btnCancelConfig);
         buttonBar.add(btnSave);
 
-        // Wrapper panel to hold the error label and the buttons at the bottom
         JPanel bottomPanel = new JPanel(new BorderLayout());
         bottomPanel.setBackground(Color.WHITE);
         bottomPanel.setBorder(new MatteBorder(1, 0, 0, 0, BORDER_COLOR));
@@ -2345,6 +2550,8 @@ public class IAEGui extends JFrame {
         dialog.setLocationRelativeTo(null);
         dialog.setVisible(true);
     }
+
+
 
     private void refreshConfigPage() {
         allConfigs = loadConfigurationsFromDb();
@@ -2456,7 +2663,7 @@ public class IAEGui extends JFrame {
         titleBox.setBorder(new MatteBorder(1, 1, 0, 1, BORDER_COLOR));
 
         JLabel lblTitle = new JLabel(mainTitle);
-        lblTitle.setFont(new Font("SansSerif", Font.BOLD, 20)); // Slightly larger for full-screen
+        lblTitle.setFont(new Font("SansSerif", Font.BOLD, 20));
         lblTitle.setForeground(TEXT_PRIMARY);
         titleBox.add(lblTitle);
 
