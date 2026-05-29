@@ -643,5 +643,28 @@ public class DatabaseManager {
             ps.executeUpdate();
         }
     }
+    public List<String> getProjectsUsingConfiguration(String configName) throws SQLException {
+        List<String> projects = new ArrayList<>();
+
+        String sql = """
+        SELECT p.name
+        FROM Projects p
+        JOIN Configurations c ON p.config_id = c.id
+        WHERE c.name = ?
+        ORDER BY p.name
+        """;
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, configName);
+
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                projects.add(rs.getString("name"));
+            }
+        }
+
+        return projects;
+    }
 
 }

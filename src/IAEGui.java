@@ -1391,22 +1391,42 @@ public class IAEGui extends JFrame {
 
     private boolean deleteConfigurationFromDb(String name) {
         DatabaseManager db = new DatabaseManager();
+
         try {
             db.connect();
             db.initSchema();
+
+            List<String> projects =
+                    db.getProjectsUsingConfiguration(name);
+
+            if (!projects.isEmpty()) {
+
+                StringBuilder msg = new StringBuilder();
+                msg.append("Cannot delete '")
+                        .append(name)
+                        .append("' because it is used by:\n\n");
+
+                for (String p : projects) {
+                    msg.append("• ").append(p).append("\n");
+                }
+
+                msg.append("\nThis configuration cannot be deleted while it is being used by existing projects.\n" +
+                        "\n" +
+                        "To delete this configuration, first delete the projects listed above or assign them a different configuration.");
+
+                JOptionPane.showMessageDialog(
+                        this,
+                        msg.toString(),
+                        "Configuration In Use",
+                        JOptionPane.WARNING_MESSAGE
+                );
+
+                return false;
+            }
+
             db.deleteConfigurationByName(name);
             return true;
-        } catch (java.sql.SQLException ex) {
-            if (ex.getMessage() != null && ex.getMessage().contains("FOREIGN KEY")) {
-                JOptionPane.showMessageDialog(this,
-                        "Cannot delete '" + name + "' because it is used by a saved project.\n" +
-                                "Delete the project first, or change its configuration to a different one.",
-                        "Configuration In Use",
-                        JOptionPane.WARNING_MESSAGE);
-            } else {
-                ex.printStackTrace();
-            }
-            return false;
+
         } catch (Exception ex) {
             ex.printStackTrace();
             return false;
