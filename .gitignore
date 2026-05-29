@@ -4,6 +4,8 @@
 
 # Build output
 out/
+build/
+dist/app/
 *.class
 
 # Mac

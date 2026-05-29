@@ -2,10 +2,12 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class DatabaseManager {
 
-    private static final String DB_URL = "jdbc:sqlite:iae.db";
+    private static final String DB_URL = "jdbc:sqlite:" + resolveDefaultDatabasePath();
     private final String dbUrl;
     private Connection connection;
 
@@ -15,6 +17,22 @@ public class DatabaseManager {
 
     public DatabaseManager(String dbUrl) {
         this.dbUrl = dbUrl;
+    }
+
+    private static String resolveDefaultDatabasePath() {
+        String appData = System.getenv("APPDATA");
+        Path dataDir;
+        if (appData != null && !appData.isBlank()) {
+            dataDir = Paths.get(appData, "IAE");
+        } else {
+            dataDir = Paths.get(System.getProperty("user.home", "."), ".iae");
+        }
+
+        File directory = dataDir.toFile();
+        if (!directory.exists()) {
+            directory.mkdirs();
+        }
+        return dataDir.resolve("iae.db").toAbsolutePath().toString();
     }
 
     //Connection

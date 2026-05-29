@@ -200,7 +200,17 @@ public class IAEGui extends JFrame {
         fileMenu.addSeparator();
         fileMenu.add(exitItem);
 
+        JMenu helpMenu = new JMenu("Help");
+        helpMenu.setMnemonic('H');
+
+        JMenuItem manualItem = new JMenuItem("Manual");
+        manualItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0));
+        manualItem.addActionListener(e -> showPage("help", btnHelp));
+
+        helpMenu.add(manualItem);
+
         menuBar.add(fileMenu);
+        menuBar.add(helpMenu);
         return menuBar;
     }
 
@@ -2654,7 +2664,7 @@ public class IAEGui extends JFrame {
 
         contentPanel.add(createHelpTopicBox("How to Define Configurations", new String[][]{
                 {"What are Configurations?", "Configurations define how to compile and run programs for different programming languages. Each configuration specifies compiler paths, compile commands, and run commands."},
-                {"Command Placeholders", "Use these placeholders in your commands: {source} for source file path, {output} for executable name, {classname} for Java class names."},
+                {"Command Placeholders", "Use $MAIN where the detected main source file or Java class name should go, and $INPUT where test input should be inserted. If $INPUT is not present, IAE appends the test input to the run command."},
                 {"Import/Export", "Save time by exporting existing configurations and importing them on other machines or sharing them with colleagues."}
         }), gbc);
         gbc.gridy++;

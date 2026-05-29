@@ -128,28 +128,16 @@ public class ConfigStore {
     }
 
     private static File resolveDefaultFile() {
-        File projectLocal = new File(DEFAULT_FILE_NAME).getAbsoluteFile();
-        if (projectLocal.exists()) {
-            return projectLocal;
+        String appData = System.getenv("APPDATA");
+        if (appData != null && !appData.isBlank()) {
+            return Paths.get(appData, "IAE", DEFAULT_FILE_NAME).toFile();
         }
-
-        String userDir = System.getProperty("user.dir");
-        if (userDir != null && !userDir.isEmpty()) {
-            File cwdFile = Paths.get(userDir, DEFAULT_FILE_NAME).toFile();
-            if (cwdFile.exists()) {
-                return cwdFile;
-            }
-        }
-
         String userHome = System.getProperty("user.home");
         if (userHome != null && !userHome.isEmpty()) {
-            File homeFile = Paths.get(userHome, ".iae", DEFAULT_FILE_NAME).toFile();
-            if (homeFile.exists()) {
-                return homeFile;
-            }
+            return Paths.get(userHome, ".iae", DEFAULT_FILE_NAME).toFile();
         }
 
-        return projectLocal;
+        return new File(DEFAULT_FILE_NAME).getAbsoluteFile();
     }
 
     public static class ImportResult {
