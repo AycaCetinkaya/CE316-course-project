@@ -2649,23 +2649,36 @@ public class IAEGui extends JFrame {
         gbc.insets = new Insets(0, 0, 0, 0);
 
         contentPanel.add(createHelpTopicBox("Getting Started", new String[][]{
-                {"What is IAE?", "The Integrated Assignment Environment (IAE) is a desktop application designed for lecturers to automatically evaluate programming assignments submitted by students. It compiles student code, runs it with test inputs, and compares outputs against expected results."},
-                {"System Requirements", "IAE requires Windows 10 or later. You must have the necessary compilers/interpreters installed for the programming languages you want to evaluate (e.g., GCC for C, Python 3 for Python)."}
+                {"What is IAE?", "The Integrated Assignment Environment (IAE) is a desktop application designed for instructors to automatically evaluate programming assignments submitted by students. It compiles student code, executes it using test inputs, and compares the outputs against expected results."},
+                {"System Requirements", "IAE requires Windows 10 or later. Ensure that the necessary compilers or interpreters are installed for the programming languages you intend to evaluate (e.g., GCC for C, Python 3 for Python)."}
         }), gbc);
         gbc.gridy++;
 
         contentPanel.add(createHelpTopicBox("How to Create a Project", new String[][]{
-                {"Step 1: Navigate to Create Project", "Click the 'Create New Project' button on the Dashboard or use the sidebar navigation."},
-                {"Step 2: Fill in Project Details", "Enter a descriptive project name (e.g., 'Data Structures - Assignment 1') and select an appropriate language configuration from the dropdown menu."},
-                {"Step 3: Select Files", "Choose your input file (test data), expected output file (correct results), and the folder containing student ZIP submissions."},
-                {"Step 4: Save and Run", "Click 'Save Project' to store the configuration, or 'Run Project' to immediately start the evaluation process."}
+                {"1. Create Project", "Click the 'Create New Project' button on the Dashboard or use the sidebar navigation."},
+                {"2. Project Details", "Enter a descriptive project name (e.g., 'Data Structures - Assignment 1') and select the appropriate language configuration from the dropdown menu. You can choose a default configuration or create and save a customized one for future use."},
+                {"3. Test Cases and Submission", "Select your input file (test data), the expected output file (correct result), and the directory containing the student ZIP submissions."},
+                {"4. Save and Run", "Click 'Save Project' and run the project later or 'Run Project' to immediately initiate the evaluation process and save it on the background."}
+        }), gbc);
+        gbc.gridy++;
+
+        contentPanel.add(createHelpTopicBox("Evaluation", new String[][]{
+                {"Results Overview", "Once a project is executed, IAE automatically processes the student submissions. Each submission will be classified into one of four evaluation states:"},
+                {"1. Compilation Failed", "The submission could not be compiled successfully."},
+                {"2. Runtime Error", "The program compiled successfully, but an error occurred during execution."},
+                {"3. Mismatch", "The program executed completely, but the output did not match the expected results."},
+                {"4. Match (Success)", "The program executed successfully and produced the exact expected output. This represents a fully successful evaluation."},
+                {"Student Details", "Click 'Student Details' to review a specific submission. This window allows the instructor to inspect source files, view compilation logs, and analyze detailed output comparisons."}
         }), gbc);
         gbc.gridy++;
 
         contentPanel.add(createHelpTopicBox("How to Define Configurations", new String[][]{
-                {"What are Configurations?", "Configurations define how to compile and run programs for different programming languages. Each configuration specifies compiler paths, compile commands, and run commands."},
-                {"Command Placeholders", "Use $MAIN where the detected main source file or Java class name should go, and $INPUT where test input should be inserted. If $INPUT is not present, IAE appends the test input to the run command."},
-                {"Import/Export", "Save time by exporting existing configurations and importing them on other machines or sharing them with colleagues."}
+                {"What are Configurations?", "Configurations define the parameters for compiling and executing programs across different programming languages. Each configuration specifies compiler paths, compilation commands, and execution arguments."},
+                {"Add Configuration", "Click the 'Add Configuration' button and populate the required fields. Ensure that the designated language and file extension correctly correspond with one another."},
+                {"Edit and Delete", "Click the edit (✎) icon to modify a selected configuration, or the delete (\uD83D\uDDD1) icon to permanently remove it. The new or edited configuration's name must be different from the existing configurations."},
+                {"Import", "Click 'Import' button and browse local files to select source file containing configurations. Don't forget that the file must be in JSON format. If the source file and the environment have common configurations, rename the source file, overwrite or skip it."},
+                {"Copy", "Click '📋' button to create an exact copy of a configuration omly with a name change." },
+                {"Export", "Click 'Export' button and you will see the list of the configurations existing in the program. Choose the ones you want to save and choose a path. The program will create a JSON file to the selected location." }
         }), gbc);
         gbc.gridy++;
 
