@@ -580,12 +580,12 @@ public class IAEGui extends JFrame {
 
         JPanel cards = new JPanel(new GridLayout(1, 4, 16, 0));
         cards.setBackground(BG_CANVAS);
-        cards.setMaximumSize(new Dimension(1050, 140));
+        cards.setMaximumSize(new Dimension(Integer.MAX_VALUE, 140));
         cards.setPreferredSize(new Dimension(1050, 140));
         cards.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         cards.add(createActionCard("Create New Project", "Set up a new assignment evaluation", "+", new Color(19, 99, 128)));
-        cards.add(createActionCard("Open Existing", "Continue working on a project", "📂", ACCENT_ORANGE));
+        cards.add(createActionCard("Open Existing", "Open a saved project", "📂", ACCENT_ORANGE));
         cards.add(createActionCard("Manage Configs", "Language configurations", "⚙", new Color(107, 114, 128)));
         cards.add(createActionCard("Help & Manual", "Documentation and guides", "?", new Color(107, 114, 128)));
 
@@ -671,7 +671,7 @@ public class IAEGui extends JFrame {
     private JPanel createRecentProjectsPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBackground(BG_CARD);
-        panel.setMaximumSize(new Dimension(1050, 520));
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 520));
         panel.setPreferredSize(new Dimension(1050, 520));
         panel.setAlignmentX(Component.LEFT_ALIGNMENT);
         panel.setBorder(new LineBorder(BORDER_COLOR, 1, true));
@@ -1073,9 +1073,9 @@ public class IAEGui extends JFrame {
         content.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel projectInfoCard = createCardPanel();
-        projectInfoCard.setMaximumSize(new Dimension(720, 360));
+        projectInfoCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 360));
         projectInfoCard.setPreferredSize(new Dimension(720, 360));
-        projectInfoCard.setLayout(new BoxLayout(projectInfoCard, BoxLayout.Y_AXIS));
+        projectInfoCard.setLayout(new BorderLayout(0, 14));
 
         txtProjectName = createTextField("e.g., Data Structures - Assignment 1");
 
@@ -1088,28 +1088,34 @@ public class IAEGui extends JFrame {
         configNames.add(0, "AUTO");
 
         cmbConfiguration = new JComboBox<>(configNames.toArray(new String[0]));
-        cmbConfiguration.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-        cmbConfiguration.setPreferredSize(new Dimension(0, 38));
+        int projectFormWidth = 1200;
+        Dimension projectInputSize = new Dimension(projectFormWidth, 38);
+
+        cmbConfiguration.setMaximumSize(projectInputSize);
+        cmbConfiguration.setPreferredSize(projectInputSize);
         cmbConfiguration.setFont(FONT_BODY);
         cmbConfiguration.setBackground(Color.WHITE);
+        cmbConfiguration.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         cmbComparator = new JComboBox<>(new String[]{
                 Project.COMPARATOR_EXACT_MATCH,
                 Project.COMPARATOR_WHITESPACE_INSENSITIVE
         });
-        cmbComparator.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-        cmbComparator.setPreferredSize(new Dimension(0, 38));
+        cmbComparator.setMaximumSize(projectInputSize);
+        cmbComparator.setPreferredSize(projectInputSize);
         cmbComparator.setFont(FONT_BODY);
         cmbComparator.setBackground(Color.WHITE);
+        cmbComparator.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         spnTimeout = new JSpinner(new SpinnerNumberModel(
                 Project.DEFAULT_TIMEOUT_SECONDS, 1, 600, 5));
-        spnTimeout.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-        spnTimeout.setPreferredSize(new Dimension(0, 38));
+        spnTimeout.setMaximumSize(projectInputSize);
+        spnTimeout.setPreferredSize(projectInputSize);
         spnTimeout.setFont(FONT_BODY);
+        spnTimeout.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JButton btnNewConfig = createSecondaryButton("+ New");
-        btnNewConfig.setPreferredSize(new Dimension(90, 38));
+        applySideActionButtonSize(btnNewConfig);
         btnNewConfig.addActionListener(e -> showConfigForm(null, created -> {
             updateConfigDropdown();
             if (cmbConfiguration != null && created != null) {
@@ -1117,36 +1123,37 @@ public class IAEGui extends JFrame {
             }
         }));
 
-        JPanel configRow = new JPanel(new BorderLayout(8, 0));
-        configRow.setBackground(BG_CARD);
-        configRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-        configRow.setPreferredSize(new Dimension(0, 38));
-        configRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        configRow.add(cmbConfiguration, BorderLayout.CENTER);
-        configRow.add(btnNewConfig, BorderLayout.EAST);
+        txtProjectName.setMaximumSize(projectInputSize);
+        txtProjectName.setPreferredSize(projectInputSize);
 
-        projectInfoCard.add(createSectionTitle("▤  Project Information"));
-        projectInfoCard.add(Box.createVerticalStrut(14));
-        projectInfoCard.add(createLabel("Project Name"));
-        projectInfoCard.add(Box.createVerticalStrut(6));
-        projectInfoCard.add(txtProjectName);
-        projectInfoCard.add(Box.createVerticalStrut(14));
-        projectInfoCard.add(createLabel("Configuration"));
-        projectInfoCard.add(Box.createVerticalStrut(6));
-        projectInfoCard.add(configRow);
+        JPanel projectInfoForm = createFormColumn(projectFormWidth);
+        projectInfoForm.add(createFixedWidthLine(createLabel("Project Name"), projectFormWidth));
+        projectInfoForm.add(Box.createVerticalStrut(6));
+        projectInfoForm.add(txtProjectName);
+        projectInfoForm.add(Box.createVerticalStrut(14));
+        projectInfoForm.add(createFormHeader("Configuration", btnNewConfig, projectFormWidth));
+        projectInfoForm.add(Box.createVerticalStrut(6));
+        projectInfoForm.add(cmbConfiguration);
 
-        projectInfoCard.add(Box.createVerticalStrut(14));
-        projectInfoCard.add(createLabel("Output Comparator"));
-        projectInfoCard.add(Box.createVerticalStrut(6));
-        projectInfoCard.add(cmbComparator);
+        projectInfoForm.add(Box.createVerticalStrut(14));
+        projectInfoForm.add(createFixedWidthLine(createLabel("Output Comparator"), projectFormWidth));
+        projectInfoForm.add(Box.createVerticalStrut(6));
+        projectInfoForm.add(cmbComparator);
 
-        projectInfoCard.add(Box.createVerticalStrut(14));
-        projectInfoCard.add(createLabel("Timeout per run (seconds)"));
-        projectInfoCard.add(Box.createVerticalStrut(6));
-        projectInfoCard.add(spnTimeout);
+        projectInfoForm.add(Box.createVerticalStrut(14));
+        projectInfoForm.add(createFixedWidthLine(createLabel("Timeout per run (seconds)"), projectFormWidth));
+        projectInfoForm.add(Box.createVerticalStrut(6));
+        projectInfoForm.add(spnTimeout);
+
+        JPanel projectInfoFormWrapper = new JPanel(new GridBagLayout());
+        projectInfoFormWrapper.setBackground(BG_CARD);
+        projectInfoFormWrapper.add(projectInfoForm);
+
+        projectInfoCard.add(createSectionTitle("▤  Project Information"), BorderLayout.NORTH);
+        projectInfoCard.add(projectInfoFormWrapper, BorderLayout.CENTER);
 
         JPanel filesCard = createCardPanel();
-        filesCard.setMaximumSize(new Dimension(720, Integer.MAX_VALUE));
+        filesCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
         filesCard.setLayout(new BoxLayout(filesCard, BoxLayout.Y_AXIS));
 
         testCaseTableModel = new DefaultTableModel(
@@ -1234,20 +1241,20 @@ public class IAEGui extends JFrame {
             }
         });
 
-        JLabel tcHint = new JLabel("Each row is one test case. Click + Add to browse for files.");
+        JLabel tcHint = new JLabel("Each row pairs an input file with its expected output. Click + Add to browse for files.");
         tcHint.setFont(new Font("SansSerif", Font.PLAIN, 11));
         tcHint.setForeground(TEXT_SECONDARY);
         tcHint.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        filesCard.add(createSectionTitle("▣  Test Cases"));
+        filesCard.add(createFullWidthLine(createSectionTitle("▣  Input / Expected Output Pairs")));
         filesCard.add(Box.createVerticalStrut(8));
-        filesCard.add(tcHint);
+        filesCard.add(createFullWidthLine(tcHint));
         filesCard.add(Box.createVerticalStrut(10));
         filesCard.add(tcToolbar);
         filesCard.add(Box.createVerticalStrut(8));
         filesCard.add(tableScroll);
         filesCard.add(Box.createVerticalStrut(16));
-        filesCard.add(createSectionTitle("   Student Submissions"));
+        filesCard.add(createFullWidthLine(createSectionTitle("   Student Submissions")));
         filesCard.add(Box.createVerticalStrut(10));
 
         txtSubmissionsFolder = createTextField("Select folder containing ZIP files...");
@@ -1261,7 +1268,7 @@ public class IAEGui extends JFrame {
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         buttons.setBackground(BG_CANVAS);
-        buttons.setMaximumSize(new Dimension(720, 50));
+        buttons.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
         buttons.setPreferredSize(new Dimension(720, 50));
         buttons.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -1305,7 +1312,7 @@ public class IAEGui extends JFrame {
 
             List<TestCase> testCases = buildTestCasesFromForm();
             if (testCases.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Please add at least one test case.");
+                JOptionPane.showMessageDialog(this, "Please add at least one input / expected output pair.");
                 return;
             }
 
@@ -1467,12 +1474,12 @@ public class IAEGui extends JFrame {
             testCases = buildTestCasesFromForm();
         } catch (Exception ex) {
             ex.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Failed to read test case files: " + ex.getMessage());
+            JOptionPane.showMessageDialog(this, "Failed to read input / expected output files: " + ex.getMessage());
             return;
         }
 
         if (testCases.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Please add at least one test case before running.");
+            JOptionPane.showMessageDialog(this, "Please add at least one input / expected output pair before running.");
             return;
         }
 
@@ -1534,8 +1541,8 @@ public class IAEGui extends JFrame {
 
         int confirm = JOptionPane.showConfirmDialog(
                 this,
-                "Re-run '" + currentProject.getName() + "'? Existing results will be replaced.",
-                "Confirm Re-run",
+                "Run '" + currentProject.getName() + "' again? Existing results will be replaced.",
+                "Confirm Run Again",
                 JOptionPane.YES_NO_OPTION
         );
         if (confirm != JOptionPane.YES_OPTION) return;
@@ -1554,7 +1561,7 @@ public class IAEGui extends JFrame {
         final int timeoutSeconds = currentProject.getTimeoutSeconds();
 
         runEvaluationAsync(
-                "Re-running '" + projectName + "', please wait...",
+                "Running '" + projectName + "' again, please wait...",
                 () -> {
                     ProjectRunnerService runner = new ProjectRunnerService();
                     runner.runProject(
@@ -1596,7 +1603,7 @@ public class IAEGui extends JFrame {
 
                     JOptionPane.showMessageDialog(this, "Project re-evaluated successfully.");
                 },
-                "Re-run failed"
+                "Run Again Failed"
         );
     }
 
@@ -2657,8 +2664,8 @@ public class IAEGui extends JFrame {
         contentPanel.add(createHelpTopicBox("How to Create a Project", new String[][]{
                 {"1. Create Project", "Click the 'Create New Project' button on the Dashboard or use the sidebar navigation."},
                 {"2. Project Details", "Enter a descriptive project name (e.g., 'Data Structures - Assignment 1') and select the appropriate language configuration from the dropdown menu. You can choose a default configuration or create and save a customized one for future use."},
-                {"3. Test Cases and Submission", "Select your input file (test data), the expected output file (correct result), and the directory containing the student ZIP submissions."},
-                {"4. Save and Run", "Click 'Save Project' and run the project later or 'Run Project' to immediately initiate the evaluation process and save it on the background."}
+                {"3. Input / Output Pairs and Submissions", "Select each input file, its expected output file, and the directory containing the student ZIP submissions."},
+                {"4. Save and Run", "Click 'Save Project' to save it for later, or 'Run Project' to save it and start evaluation immediately."}
         }), gbc);
         gbc.gridy++;
 
@@ -2763,6 +2770,7 @@ public class IAEGui extends JFrame {
         label.setFont(FONT_SUBHEADER);
         label.setForeground(TEXT_PRIMARY);
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        label.setHorizontalAlignment(SwingConstants.LEFT);
         return label;
     }
 
@@ -2775,6 +2783,76 @@ public class IAEGui extends JFrame {
         return label;
     }
 
+    private JPanel createFullWidthLine(JComponent component) {
+        JPanel row = new JPanel(new BorderLayout());
+        row.setBackground(BG_CARD);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, component.getPreferredSize().height));
+        row.add(component, BorderLayout.WEST);
+        return row;
+    }
+
+    private JPanel createFixedWidthLine(JComponent component, int width) {
+        JPanel row = new JPanel(new BorderLayout());
+        row.setBackground(BG_CARD);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.setMaximumSize(new Dimension(width, component.getPreferredSize().height));
+        row.setPreferredSize(new Dimension(width, component.getPreferredSize().height));
+        row.add(component, BorderLayout.WEST);
+        return row;
+    }
+
+    private JPanel createFormHeader(String labelText, JButton actionButton) {
+        return createFormHeader(labelText, actionButton, Integer.MAX_VALUE);
+    }
+
+    private JPanel createFormHeader(String labelText, JButton actionButton, int width) {
+        JPanel row = new JPanel();
+        row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
+        row.setBackground(BG_CARD);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.setMaximumSize(new Dimension(width, 38));
+        row.setPreferredSize(new Dimension(width, 38));
+
+        row.add(createLabel(labelText));
+        row.add(Box.createHorizontalStrut(14));
+        row.add(actionButton);
+        row.add(Box.createHorizontalGlue());
+        return row;
+    }
+
+    private JPanel createFormColumn(int width) {
+        JPanel column = new JPanel() {
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension preferred = super.getPreferredSize();
+                return new Dimension(width, preferred.height);
+            }
+
+            @Override
+            public Dimension getMinimumSize() {
+                Dimension minimum = super.getMinimumSize();
+                return new Dimension(width, minimum.height);
+            }
+        };
+        column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
+        column.setBackground(BG_CARD);
+        column.setAlignmentX(Component.CENTER_ALIGNMENT);
+        column.setMaximumSize(new Dimension(width, Integer.MAX_VALUE));
+        return column;
+    }
+
+    private Dimension createSideActionButtonSize() {
+        return new Dimension(106, 38);
+    }
+
+    private void applySideActionButtonSize(AbstractButton button) {
+        Dimension size = createSideActionButtonSize();
+        button.setMinimumSize(size);
+        button.setPreferredSize(size);
+        button.setMaximumSize(size);
+    }
+
     private JTextField createTextField(String placeholder) {
         JTextField field = new JTextField(placeholder);
         field.setFont(FONT_BODY);
@@ -2782,6 +2860,7 @@ public class IAEGui extends JFrame {
         field.setBackground(Color.WHITE);
         field.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
         field.setPreferredSize(new Dimension(0, 38));
+        field.setAlignmentX(Component.LEFT_ALIGNMENT);
         field.setBorder(BorderFactory.createCompoundBorder(
                 new LineBorder(BORDER_COLOR, 1, true),
                 new EmptyBorder(8, 12, 8, 12)
@@ -2823,7 +2902,7 @@ public class IAEGui extends JFrame {
         textField.setEditable(false);
 
         JButton browse = createSecondaryButton("Browse");
-        browse.setPreferredSize(new Dimension(90, 38));
+        applySideActionButtonSize(browse);
 
         browse.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
@@ -2863,6 +2942,7 @@ public class IAEGui extends JFrame {
         btn.setOpaque(true);
         btn.setBorder(new EmptyBorder(9, 16, 9, 16));
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        addButtonHover(btn, new Color(241, 245, 249), new Color(226, 232, 240), TEXT_PRIMARY, TEXT_PRIMARY);
         return btn;
     }
 
@@ -2875,6 +2955,7 @@ public class IAEGui extends JFrame {
         btn.setOpaque(true);
         btn.setBorder(new EmptyBorder(9, 18, 9, 18));
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        addButtonHover(btn, new Color(19, 99, 128), new Color(15, 88, 113), Color.WHITE, Color.WHITE);
         return btn;
     }
 
@@ -2887,7 +2968,25 @@ public class IAEGui extends JFrame {
         btn.setOpaque(true);
         btn.setBorder(new EmptyBorder(9, 18, 9, 18));
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        addButtonHover(btn, ACCENT_ORANGE, new Color(220, 96, 12), Color.WHITE, Color.WHITE);
         return btn;
+    }
+
+    private void addButtonHover(AbstractButton button, Color normalBg, Color hoverBg, Color normalFg, Color hoverFg) {
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                if (!button.isEnabled()) return;
+                button.setBackground(hoverBg);
+                button.setForeground(hoverFg);
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setBackground(normalBg);
+                button.setForeground(normalFg);
+            }
+        });
     }
 
     private Color makeSoftColor(Color color) {
@@ -2954,7 +3053,7 @@ public class IAEGui extends JFrame {
     private JPanel createProjectDetailsPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBackground(BG_CANVAS);
-        panel.setBorder(new EmptyBorder(30, 185, 35, 60));
+        panel.setBorder(new EmptyBorder(30, 40, 35, 40));
 
         if (currentProject == null) {
             JPanel emptyPanel = new JPanel();
@@ -2993,7 +3092,7 @@ public class IAEGui extends JFrame {
 
         JPanel headerRow = new JPanel(new BorderLayout());
         headerRow.setBackground(BG_CANVAS);
-        headerRow.setMaximumSize(new Dimension(950, 95));
+        headerRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 95));
         headerRow.setPreferredSize(new Dimension(950, 95));
         headerRow.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -3006,7 +3105,7 @@ public class IAEGui extends JFrame {
         title.setForeground(TEXT_PRIMARY);
         title.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel projectId = new JLabel("Project ID: " + (currentProject.getId() > 0 ? currentProject.getId() : "N/A"));
+        JLabel projectId = new JLabel("Project ID: " + (currentProject.getId() > 0 ? currentProject.getId() : "Not assigned"));
         projectId.setFont(FONT_BODY);
         projectId.setForeground(TEXT_SECONDARY);
         projectId.setBorder(new EmptyBorder(8, 0, 0, 0));
@@ -3038,7 +3137,7 @@ public class IAEGui extends JFrame {
 
         JPanel topCards = new JPanel(new GridLayout(1, 2, 18, 0));
         topCards.setBackground(BG_CANVAS);
-        topCards.setMaximumSize(new Dimension(950, 210));
+        topCards.setMaximumSize(new Dimension(Integer.MAX_VALUE, 210));
         topCards.setPreferredSize(new Dimension(950, 210));
         topCards.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -3046,12 +3145,12 @@ public class IAEGui extends JFrame {
         topCards.add(createProjectResultsSummaryCard(total, passed, failed, passRate));
 
         JPanel filesCard = createProjectFilesDetailsCard(currentProject);
-        filesCard.setMaximumSize(new Dimension(950, 300));
+        filesCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 300));
         filesCard.setPreferredSize(new Dimension(950, 300));
         filesCard.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel infoBox = createProjectInfoBox(currentProject, total);
-        infoBox.setMaximumSize(new Dimension(950, 78));
+        infoBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 78));
         infoBox.setPreferredSize(new Dimension(950, 78));
         infoBox.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -3312,10 +3411,10 @@ public class IAEGui extends JFrame {
 
     private String getProjectTestCasesText(Project project) {
         if (project.getTestCases() == null || project.getTestCases().isEmpty()) {
-            return "No test cases";
+            return "No input / output pairs";
         }
 
-        return project.getTestCases().size() + " test case(s)";
+        return project.getTestCases().size() + " input / output pair(s)";
     }
 
     private String getProjectFirstZipPath(Project project) {
@@ -3435,7 +3534,7 @@ public class IAEGui extends JFrame {
         topActions.setBorder(new EmptyBorder(6, 0, 0, 0));
 
         JButton btnProjectDetails = createInfoToolbarButton("Project Details");
-        JButton btnRerun = createToolbarButton("refresh", "Re-run", false);
+        JButton btnRerun = createToolbarButton("refresh", "Run Again", false);
         JButton btnExport = createToolbarButton("download", "Export Results", true);
 
         btnProjectDetails.setPreferredSize(new Dimension(170, 46));
@@ -3484,7 +3583,7 @@ public class IAEGui extends JFrame {
         returnDashboardBox.setMaximumSize(new Dimension(340, 44));
         returnDashboardBox.setPreferredSize(new Dimension(340, 44));
 
-        JButton btnReturnDashboard = createSecondaryButton("←  Return Dashboard");
+        JButton btnReturnDashboard = createSecondaryButton("←  Return to Dashboard");
         btnReturnDashboard.setPreferredSize(new Dimension(170, 40));
         btnReturnDashboard.addActionListener(e -> showPage("dashboard", btnDashboard));
 
@@ -3524,6 +3623,16 @@ public class IAEGui extends JFrame {
     private String getFinalStatus(Status status) {
         if (status == null) return "Not Evaluated";
         return status == Status.SUCCESS ? "Passed" : "Failed";
+    }
+
+    private String getFriendlyStatusText(Status status) {
+        if (status == null) return "Not Evaluated";
+        if (status == Status.SUCCESS) return "Passed";
+        if (status == Status.EXTRACTION_ERROR) return "Extraction Error";
+        if (status == Status.COMPILE_ERROR) return "Compilation Error";
+        if (status == Status.RUNTIME_ERROR) return "Runtime Error";
+        if (status == Status.WRONG_OUTPUT) return "Wrong Output";
+        return "Not Evaluated";
     }
 
     private void exportCurrentProjectResults() {
@@ -3613,7 +3722,7 @@ public class IAEGui extends JFrame {
     private JPanel createStudentDetailsPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBackground(BG_CANVAS);
-        panel.setBorder(new EmptyBorder(30, 185, 35, 60));
+        panel.setBorder(new EmptyBorder(30, 40, 35, 40));
 
         if (currentSubmission == null) {
             panel.add(new JLabel("No student selected."), BorderLayout.CENTER);
@@ -3645,7 +3754,7 @@ public class IAEGui extends JFrame {
 
         JPanel headerRow = new JPanel(new BorderLayout());
         headerRow.setBackground(BG_CANVAS);
-        headerRow.setMaximumSize(new Dimension(1050, 92));
+        headerRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 92));
         headerRow.setPreferredSize(new Dimension(1050, 92));
         headerRow.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -3663,7 +3772,7 @@ public class IAEGui extends JFrame {
 
         JPanel topCards = new JPanel(new GridLayout(1, 2, 18, 0));
         topCards.setBackground(BG_CANVAS);
-        topCards.setMaximumSize(new Dimension(1050, 155));
+        topCards.setMaximumSize(new Dimension(Integer.MAX_VALUE, 155));
         topCards.setPreferredSize(new Dimension(1050, 155));
         topCards.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -3671,13 +3780,13 @@ public class IAEGui extends JFrame {
         topCards.add(createCompilationCard(status, result));
 
         JPanel compilationOutput = createOutputBlock(
-                "Compilation Output (stderr)",
+                "Compiler Messages",
                 result == null || result.getErrorMessage() == null || result.getErrorMessage().isBlank()
                         ? "(No compilation errors)"
                         : result.getErrorMessage(),
                 true
         );
-        compilationOutput.setMaximumSize(new Dimension(1050, 165));
+        compilationOutput.setMaximumSize(new Dimension(Integer.MAX_VALUE, 165));
         compilationOutput.setPreferredSize(new Dimension(1050, 165));
         compilationOutput.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -3685,7 +3794,7 @@ public class IAEGui extends JFrame {
         outputGrid.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel comparison = createComparisonCard(status);
-        comparison.setMaximumSize(new Dimension(1050, 115));
+        comparison.setMaximumSize(new Dimension(Integer.MAX_VALUE, 115));
         comparison.setPreferredSize(new Dimension(1050, 115));
         comparison.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -3707,7 +3816,7 @@ public class IAEGui extends JFrame {
         JPanel card = createCardPanel();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
 
-        JLabel title = createSectionTitle("Expected vs Actual Output Diff");
+        JLabel title = createSectionTitle("Expected vs Actual Output");
         title.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.add(title);
         card.add(Box.createVerticalStrut(12));
@@ -3717,16 +3826,16 @@ public class IAEGui extends JFrame {
             empty.setFont(FONT_BODY);
             empty.setForeground(TEXT_SECONDARY);
             card.add(empty);
-            card.setMaximumSize(new Dimension(1050, 120));
+            card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 120));
             return card;
         }
 
         if (currentProject == null || currentProject.getTestCases() == null || currentProject.getTestCases().isEmpty()) {
-            JLabel empty = new JLabel("No test cases found.");
+            JLabel empty = new JLabel("No input / expected output pairs found.");
             empty.setFont(FONT_BODY);
             empty.setForeground(TEXT_SECONDARY);
             card.add(empty);
-            card.setMaximumSize(new Dimension(1050, 120));
+            card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 120));
             return card;
         }
 
@@ -3762,7 +3871,7 @@ public class IAEGui extends JFrame {
         height = Math.min(520, height);
 
         card.setPreferredSize(new Dimension(1050, height));
-        card.setMaximumSize(new Dimension(1050, height));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
 
         return card;
     }
@@ -3776,9 +3885,9 @@ public class IAEGui extends JFrame {
                 new EmptyBorder(12, 12, 12, 12)
         ));
 
-        String statusText = status == null ? "UNKNOWN" : status.name();
+        String statusText = getFriendlyStatusText(status);
 
-        JLabel header = new JLabel("Test Case " + testNumber + "  •  " + statusText);
+        JLabel header = new JLabel("Input / Output Pair " + testNumber + " - " + statusText);
         header.setFont(FONT_SUBHEADER);
         header.setForeground(TEXT_PRIMARY);
         header.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -3980,13 +4089,14 @@ public class IAEGui extends JFrame {
         body.setBackground(BG_CARD);
         body.setBorder(new EmptyBorder(10, 18, 18, 18));
 
+        boolean compilePending = status == null;
         boolean compileFailed = status == Status.COMPILE_ERROR || status == Status.EXTRACTION_ERROR;
 
-        JLabel compileStatus = new JLabel(compileFailed ? "⊗  Compilation Failed" : "◎  Compilation Successful");
+        JLabel compileStatus = new JLabel(compilePending ? "Not Evaluated" : (compileFailed ? "⊗  Compilation Failed" : "◎  Compilation Successful"));
         compileStatus.setFont(new Font("SansSerif", Font.BOLD, 13));
-        compileStatus.setForeground(compileFailed ? new Color(220, 38, 38) : new Color(5, 150, 105));
+        compileStatus.setForeground(compilePending ? TEXT_SECONDARY : (compileFailed ? new Color(220, 38, 38) : new Color(5, 150, 105)));
 
-        JLabel exitCode = new JLabel(compileFailed ? "Exit Code: 1" : "Exit Code: 0");
+        JLabel exitCode = new JLabel(compilePending ? "No compiler output yet" : (compileFailed ? "Exit Code: 1" : "Exit Code: 0"));
         exitCode.setFont(FONT_BODY);
         exitCode.setForeground(TEXT_SECONDARY);
 
@@ -4082,6 +4192,18 @@ public class IAEGui extends JFrame {
         btn.setContentAreaFilled(false);
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        btn.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                if (!btn.isEnabled()) return;
+                btn.setForeground(new Color(15, 88, 113));
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                btn.setForeground(new Color(19, 99, 128));
+            }
+        });
         return btn;
     }
     private JScrollPane wrapWithScroll(JPanel panel) {
@@ -4475,6 +4597,7 @@ public class IAEGui extends JFrame {
         btn.setOpaque(true);
         btn.setBorder(new EmptyBorder(9, 18, 9, 18));
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        addButtonHover(btn, new Color(37, 99, 235), new Color(29, 78, 216), Color.WHITE, Color.WHITE);
         return btn;
     }
     private class PassRateCirclePanel extends JPanel {
@@ -4613,6 +4736,7 @@ public class IAEGui extends JFrame {
                     new LineBorder(new Color(37, 99, 235), 1, true),
                     new EmptyBorder(11, 18, 11, 18)
             ));
+            addButtonHover(btn, new Color(37, 99, 235), new Color(29, 78, 216), Color.WHITE, Color.WHITE);
         } else {
             btn.setBackground(Color.WHITE);
             btn.setForeground(TEXT_PRIMARY);
@@ -4620,6 +4744,7 @@ public class IAEGui extends JFrame {
                     new LineBorder(new Color(203, 213, 225), 1, true),
                     new EmptyBorder(11, 18, 11, 18)
             ));
+            addButtonHover(btn, Color.WHITE, new Color(248, 250, 252), TEXT_PRIMARY, TEXT_PRIMARY);
         }
 
         return btn;
@@ -4828,7 +4953,7 @@ public class IAEGui extends JFrame {
             return "No input file selected";
         }
 
-        return "Input data saved in " + project.getTestCases().size() + " test case(s)";
+        return "Input data saved in " + project.getTestCases().size() + " input / output pair(s)";
     }
 
     private String getProjectExpectedOutputFileText(Project project) {
@@ -4836,7 +4961,7 @@ public class IAEGui extends JFrame {
             return "No expected output file selected";
         }
 
-        return "Expected output saved in " + project.getTestCases().size() + " test case(s)";
+        return "Expected output saved in " + project.getTestCases().size() + " input / output pair(s)";
     }
     private static class ProjectFilePaths {
         String inputFilePath;
